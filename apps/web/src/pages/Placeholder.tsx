@@ -1,0 +1,1 @@
+import { useParams } from 'react-router-dom';import { Construction } from 'lucide-react';export function Placeholder(){const {page}=useParams();return <div className="page"><div className="card empty big"><Construction/><h2>{page?.replace('-',' ')}</h2><p>Este módulo já está previsto na arquitetura e no banco de dados.</p></div></div>}
