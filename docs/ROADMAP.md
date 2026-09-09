@@ -66,32 +66,47 @@ Critério de aceite: sessão segura, renovável e revogável, sem token persiste
 
 ## Etapa 2 — Multi-tenancy e RBAC
 
-- [ ] 2.1 Criar decorator para usuário autenticado
-- [ ] 2.2 Criar serviço central de contexto do tenant
-- [ ] 2.3 Substituir filtros manuais por repositories/services tenant-aware
-- [ ] 2.4 Criar tabelas de permissões e vínculos de perfil
-- [ ] 2.5 Criar catálogo de permissões do sistema
-- [ ] 2.6 Criar guard de roles
-- [ ] 2.7 Criar guard de permissões
-- [ ] 2.8 Permitir exceção controlada para Super Admin
-- [ ] 2.9 Ocultar ações sem permissão no frontend
-- [ ] 2.10 Criar teste E2E Barbearia A versus Barbearia B para cada padrão de acesso
-- [ ] 2.11 Avaliar e aplicar PostgreSQL Row Level Security
+- [x] 2.1 Criar decorator para usuário autenticado
+- [x] 2.2 Criar serviço central de contexto do tenant
+- [x] 2.3 Substituir filtros manuais por repositories/services tenant-aware
+- [x] 2.4 Criar tabelas de permissões e vínculos de perfil
+- [x] 2.5 Criar catálogo de permissões do sistema
+- [x] 2.6 Criar guard de roles
+- [x] 2.7 Criar guard de permissões
+- [x] 2.8 Permitir exceção controlada para Super Admin
+- [x] 2.9 Ocultar ações sem permissão no frontend
+- [x] 2.10 Criar teste E2E Barbearia A versus Barbearia B para cada padrão de acesso
+- [ ] 2.11 Aplicar PostgreSQL Row Level Security (avaliação concluída; depende da separação dos papéis de banco em produção)
 
 Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, inclusive em atualização, exclusão e relacionamentos.
 
 ## Etapa 3 — Barbearias, planos e Super Admin
 
-- [ ] 3.1 CRUD de planos
-- [ ] 3.2 Listagem paginada de barbearias
-- [ ] 3.3 Cadastro de barbearia com administrador inicial
-- [ ] 3.4 Edição dos dados da barbearia
-- [ ] 3.5 Ativar, suspender e cancelar barbearia
-- [ ] 3.6 Aplicar vencimento e status da assinatura no login
-- [ ] 3.7 Exibir métricas de usuários e colaboradores por tenant
-- [ ] 3.8 Criar dashboard do Super Admin
-- [ ] 3.9 Criar tela de planos e assinatura
-- [ ] 3.10 Auditar mudanças administrativas
+- [x] 3.1 CRUD de planos
+- [x] 3.2 Listagem paginada de barbearias
+- [x] 3.3 Cadastro de barbearia com administrador inicial
+- [x] 3.4 Edição dos dados da barbearia
+- [x] 3.5 Ativar, suspender e cancelar barbearia
+- [x] 3.6 Aplicar vencimento e status da assinatura no login
+- [x] 3.7 Exibir métricas de usuários e colaboradores por tenant
+- [x] 3.8 Criar dashboard do Super Admin
+- [x] 3.9 Criar tela de planos e assinatura
+- [x] 3.10 Auditar mudanças administrativas
+- [x] 3.11 Criar página detalhada de cada barbearia
+- [x] 3.12 Acompanhar progresso de cadastro e onboarding por tenant
+- [x] 3.13 Registrar histórico de alterações de plano e assinatura
+- [x] 3.14 Configurar período de teste e conversão para plano pago
+- [x] 3.15 Implementar renovação, upgrade e downgrade de plano
+- [x] 3.16 Criar entidades de cobrança, fatura e pagamento da assinatura
+- [x] 3.17 Controlar cobranças pagas, pendentes, vencidas, estornadas e canceladas
+- [ ] 3.18 Implementar cupons, descontos e períodos de cortesia
+- [ ] 3.19 Calcular MRR, ARR, ticket médio, churn e inadimplência
+- [ ] 3.20 Criar régua e histórico de tentativas de cobrança
+- [ ] 3.21 Suspender e reativar tenant conforme regras de inadimplência
+- [x] 3.22 Criar tela de pagamentos e faturas no Super Admin
+- [ ] 3.23 Criar visão financeira consolidada do SaaS
+- [ ] 3.24 Criar interface para integração futura com gateway de pagamento
+- [ ] 3.25 Criar relatórios comerciais por período, plano e status
 
 ## Etapa 4 — Colaboradores e usuários
 
@@ -359,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Começar pela **2.1–2.3 — contexto autenticado e isolamento do tenant**, centralizando o acesso multiempresa antes de criar os CRUDs. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 3** pelas renovações, upgrade/downgrade e entidades de cobrança, fatura e pagamento. A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

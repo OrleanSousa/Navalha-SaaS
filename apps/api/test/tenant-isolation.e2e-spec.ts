@@ -1,0 +1,358 @@
+import 'dotenv/config';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
+import { Test } from '@nestjs/testing';
+import { BarbershopStatus, Role } from '@prisma/client';
+import * as bcrypt from 'bcrypt';
+// CommonJS export used by Jest in this project.
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+import request = require('supertest');
+import { TenantContext } from '../src/auth-context';
+import { AuthController, AuthService, JwtStrategy } from '../src/auth';
+import { DataController } from '../src/data.controller';
+import { DataService } from '../src/data.service';
+import { PrismaService } from '../src/prisma.service';
+import { PermissionsGuard, RolesGuard } from '../src/rbac';
+import { SuperAdminController, SuperAdminService } from '../src/super-admin';
+
+describe('Isolamento multi-tenant (e2e)', () => {
+  let app: INestApplication;
+  let db: PrismaService;
+  let shopAId: string;
+  let shopBId: string;
+  let userAId: string;
+  let userBId: string;
+  let superAdminId: string;
+  let createdShopId: string | undefined;
+  let createdAdminId: string | undefined;
+  let createdPlanId: string | undefined;
+  const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const password = 'Test@1234';
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        PassportModule,
+        JwtModule.register({
+          global: true,
+          secret: process.env.JWT_SECRET || 'development-secret-change-me',
+          signOptions: { expiresIn: '15m' },
+        }),
+      ],
+      controllers: [AuthController, DataController, SuperAdminController],
+      providers: [
+        PrismaService,
+        AuthService,
+        JwtStrategy,
+        TenantContext,
+        DataService,
+        RolesGuard,
+        PermissionsGuard,
+        SuperAdminService,
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    app.setGlobalPrefix('api');
+    app.useGlobalPipes(
+      new ValidationPipe({ whitelist: true, transform: true, forbidNonWhitelisted: true }),
+    );
+    await app.init();
+    db = app.get(PrismaService);
+    const basePlan = await db.plan.findFirstOrThrow({ where: { active: true } });
+
+    const [shopA, shopB] = await Promise.all([
+      db.barbershop.create({
+        data: {
+          name: `Tenant A ${suffix}`,
+          slug: `tenant-a-${suffix}`,
+          ownerName: 'Tenant A',
+          status: BarbershopStatus.ACTIVE,
+          subscription: { create: { planId: basePlan.id, status: 'ACTIVE' } },
+        },
+      }),
+      db.barbershop.create({
+        data: {
+          name: `Tenant B ${suffix}`,
+          slug: `tenant-b-${suffix}`,
+          ownerName: 'Tenant B',
+          status: BarbershopStatus.ACTIVE,
+          subscription: { create: { planId: basePlan.id, status: 'ACTIVE' } },
+        },
+      }),
+    ]);
+    shopAId = shopA.id;
+    shopBId = shopB.id;
+
+    const passwordHash = await bcrypt.hash(password, 4);
+    const [userA, userB, superAdmin] = await Promise.all([
+      db.user.create({
+        data: {
+          barbershopId: shopAId,
+          email: `admin-a-${suffix}@example.com`,
+          passwordHash,
+          name: 'Admin A',
+          role: Role.ADMIN,
+        },
+      }),
+      db.user.create({
+        data: {
+          barbershopId: shopBId,
+          email: `admin-b-${suffix}@example.com`,
+          passwordHash,
+          name: 'Admin B',
+          role: Role.ADMIN,
+        },
+      }),
+      db.user.create({
+        data: {
+          email: `super-${suffix}@example.com`,
+          passwordHash,
+          name: 'Super Admin',
+          role: Role.SUPER_ADMIN,
+        },
+      }),
+    ]);
+    userAId = userA.id;
+    userBId = userB.id;
+    superAdminId = superAdmin.id;
+
+    await Promise.all([
+      db.customer.create({
+        data: { barbershopId: shopAId, name: `Cliente A ${suffix}`, phone: '11911111111' },
+      }),
+      db.customer.create({
+        data: { barbershopId: shopBId, name: `Cliente B ${suffix}`, phone: '11922222222' },
+      }),
+    ]);
+  });
+
+  afterAll(async () => {
+    const userIds = [userAId, userBId, superAdminId, createdAdminId].filter((id): id is string =>
+      Boolean(id),
+    );
+    const shopIds = [shopAId, shopBId, createdShopId].filter((id): id is string => Boolean(id));
+    if (userIds.length) {
+      await db.session.deleteMany({ where: { userId: { in: userIds } } });
+      await db.auditLog.deleteMany({ where: { userId: { in: userIds } } });
+      await db.user.deleteMany({ where: { id: { in: userIds } } });
+    }
+    if (shopIds.length) {
+      await db.customer.deleteMany({ where: { barbershopId: { in: shopIds } } });
+      await db.subscription.deleteMany({ where: { barbershopId: { in: shopIds } } });
+      await db.barbershop.deleteMany({ where: { id: { in: shopIds } } });
+    }
+    if (createdPlanId) await db.plan.deleteMany({ where: { id: createdPlanId } });
+    await app.close();
+  });
+
+  async function login(email: string) {
+    const response = await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email, password })
+      .expect(200);
+    return response.body.accessToken as string;
+  }
+
+  it('retorna somente registros pertencentes ao tenant do token', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    const tokenB = await login(`admin-b-${suffix}@example.com`);
+
+    const [responseA, responseB] = await Promise.all([
+      request(app.getHttpServer())
+        .get(`/api/customers?barbershopId=${shopBId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200),
+      request(app.getHttpServer())
+        .get(`/api/customers?barbershopId=${shopAId}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(200),
+    ]);
+
+    expect(responseA.body.map((customer: { name: string }) => customer.name)).toEqual([
+      `Cliente A ${suffix}`,
+    ]);
+    expect(responseB.body.map((customer: { name: string }) => customer.name)).toEqual([
+      `Cliente B ${suffix}`,
+    ]);
+  });
+
+  it('rejeita acesso sem autenticação', () =>
+    request(app.getHttpServer()).get('/api/customers').expect(401));
+
+  it('não libera Super Admin em rota tenant-aware sem exceção explícita', async () => {
+    const token = await login(`super-${suffix}@example.com`);
+    await request(app.getHttpServer())
+      .get('/api/dashboard')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+  });
+
+  it('permite ao Super Admin cadastrar um tenant com administrador inicial', async () => {
+    const token = await login(`super-${suffix}@example.com`);
+    const plans = await request(app.getHttpServer())
+      .get('/api/super-admin/plans')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const targetPlanId = plans.body.find((plan: { active: boolean }) => plan.active).id;
+
+    const createdPlan = await request(app.getHttpServer())
+      .post('/api/super-admin/plans')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: `Teste ${suffix}`,
+        price: 49.9,
+        maxEmployees: 5,
+        maxUsers: 2,
+        features: { agenda: true },
+      })
+      .expect(201);
+    createdPlanId = createdPlan.body.id;
+    const updatedPlan = await request(app.getHttpServer())
+      .patch(`/api/super-admin/plans/${createdPlanId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ price: 59.9 })
+      .expect(200);
+    expect(Number(updatedPlan.body.price)).toBe(59.9);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/super-admin/barbershops')
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: `Tenant criado ${suffix}`,
+        ownerName: 'Novo Proprietário',
+        email: `tenant-${suffix}@example.com`,
+        documentType: 'CPF',
+        document: '12345678901',
+        phone: '11999999999',
+        planId: createdPlanId,
+        adminName: 'Novo Administrador',
+        adminEmail: `novo-admin-${suffix}@example.com`,
+        adminPassword: password,
+        adminPasswordConfirmation: password,
+      })
+      .expect(201);
+
+    createdShopId = response.body.id;
+    createdAdminId = response.body.users[0].id;
+    expect(response.body.subscription.plan.id).toBe(createdPlanId);
+
+    const updatedShop = await request(app.getHttpServer())
+      .patch(`/api/super-admin/barbershops/${createdShopId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: `Tenant atualizado ${suffix}`,
+        phone: '(11) 98888-7777',
+        planId: targetPlanId,
+      })
+      .expect(200);
+    expect(updatedShop.body.name).toBe(`Tenant atualizado ${suffix}`);
+    expect(updatedShop.body.subscription.plan.id).toBe(targetPlanId);
+
+    await request(app.getHttpServer())
+      .patch(`/api/super-admin/barbershops/${createdShopId}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'SUSPENDED' })
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/auth/login')
+      .send({ email: `novo-admin-${suffix}@example.com`, password })
+      .expect(401);
+    await request(app.getHttpServer())
+      .patch(`/api/super-admin/barbershops/${createdShopId}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'ACTIVE' })
+      .expect(200);
+
+    const detail = await request(app.getHttpServer())
+      .get(`/api/super-admin/barbershops/${createdShopId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(detail.body._count.users).toBe(1);
+
+    const trial = await request(app.getHttpServer())
+      .post(`/api/super-admin/barbershops/${createdShopId}/subscription/trial`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ days: 14 })
+      .expect(201);
+    expect(trial.body.status).toBe('TRIAL');
+
+    const history = await request(app.getHttpServer())
+      .get(`/api/super-admin/barbershops/${createdShopId}/subscription-history`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(history.body.map((entry: { action: string }) => entry.action)).toEqual(
+      expect.arrayContaining(['SUBSCRIPTION_CREATED', 'TRIAL_STARTED']),
+    );
+    expect(history.body.some((entry: { action: string }) => entry.action.startsWith('PLAN_'))).toBe(
+      true,
+    );
+
+    await request(app.getHttpServer())
+      .post(`/api/super-admin/barbershops/${createdShopId}/subscription/activate`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+
+    const renewed = await request(app.getHttpServer())
+      .post(`/api/super-admin/barbershops/${createdShopId}/subscription/renew`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ months: 2 })
+      .expect(201);
+    expect(renewed.body.status).toBe('ACTIVE');
+    expect(new Date(renewed.body.expiresAt).getTime()).toBeGreaterThan(Date.now());
+
+    const invoice = await request(app.getHttpServer())
+      .post(`/api/super-admin/barbershops/${createdShopId}/invoices`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: 100, discount: 10, dueDate: new Date(Date.now() + 86400000).toISOString() })
+      .expect(201);
+    expect(Number(invoice.body.total)).toBe(90);
+    expect(invoice.body.status).toBe('PENDING');
+
+    const paidInvoice = await request(app.getHttpServer())
+      .post(`/api/super-admin/invoices/${invoice.body.id}/payments`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: 90, method: 'PIX' })
+      .expect(201);
+    expect(paidInvoice.body.status).toBe('PAID');
+    expect(paidInvoice.body.payments).toHaveLength(1);
+
+    const invoices = await request(app.getHttpServer())
+      .get('/api/super-admin/invoices?status=PAID')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(invoices.body.items.some((item: { id: string }) => item.id === invoice.body.id)).toBe(
+      true,
+    );
+
+    const refunded = await request(app.getHttpServer())
+      .post(`/api/super-admin/invoices/${invoice.body.id}/refund`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+    expect(refunded.body.status).toBe('REFUNDED');
+
+    const cancelledInvoice = await request(app.getHttpServer())
+      .post(`/api/super-admin/barbershops/${createdShopId}/invoices`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ amount: 59.9, dueDate: new Date(Date.now() + 86400000).toISOString() })
+      .expect(201);
+    const cancelled = await request(app.getHttpServer())
+      .post(`/api/super-admin/invoices/${cancelledInvoice.body.id}/cancel`)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(201);
+    expect(cancelled.body.status).toBe('CANCELLED');
+
+    const dashboard = await request(app.getHttpServer())
+      .get('/api/super-admin/dashboard')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(dashboard.body.metrics.total).toBeGreaterThanOrEqual(3);
+
+    const adminToken = await login(`novo-admin-${suffix}@example.com`);
+    const customers = await request(app.getHttpServer())
+      .get('/api/customers')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(customers.body).toEqual([]);
+  });
+});

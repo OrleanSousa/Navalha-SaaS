@@ -22,6 +22,7 @@ describe('AuthService login', () => {
       user: { findUnique: jest.fn() },
       auditLog: { create: jest.fn().mockResolvedValue({}) },
       session: { create: jest.fn().mockResolvedValue({}) },
+      rolePermission: { findMany: jest.fn().mockResolvedValue([]) },
     };
     jwt = { signAsync: jest.fn().mockResolvedValue('access-token') };
     service = new AuthService(db, jwt);
@@ -36,7 +37,11 @@ describe('AuthService login', () => {
       role: 'ADMIN',
       active: true,
       passwordHash,
-      barbershop: { name: 'Barbearia', status: 'ACTIVE' },
+      barbershop: {
+        name: 'Barbearia',
+        status: 'ACTIVE',
+        subscription: { status: 'ACTIVE', expiresAt: null },
+      },
       ...overrides,
     };
   }
@@ -78,6 +83,23 @@ describe('AuthService login', () => {
   it('rejeita barbearia suspensa', async () => {
     db.user.findUnique.mockResolvedValue(
       user({ barbershop: { name: 'Barbearia', status: 'SUSPENDED' } }),
+    );
+
+    await expect(
+      service.login({ email: 'admin@example.com', password: 'Valid@123' }, request),
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(db.session.create).not.toHaveBeenCalled();
+  });
+
+  it('rejeita assinatura expirada', async () => {
+    db.user.findUnique.mockResolvedValue(
+      user({
+        barbershop: {
+          name: 'Barbearia',
+          status: 'ACTIVE',
+          subscription: { status: 'ACTIVE', expiresAt: new Date(Date.now() - 1000) },
+        },
+      }),
     );
 
     await expect(

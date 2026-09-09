@@ -1,9 +1,48 @@
-import { Controller,Get,Req,UseGuards } from '@nestjs/common';import { AuthGuard } from '@nestjs/passport';import { PrismaService } from './prisma.service';
-@Controller()@UseGuards(AuthGuard('jwt'))export class DataController{constructor(private db:PrismaService){}private tenant(req:any){if(!req.user.barbershopId)throw new Error('Usuário sem tenant');return req.user.barbershopId}
-@Get('customers')customers(@Req()r:any){return this.db.customer.findMany({where:{barbershopId:this.tenant(r),deletedAt:null},include:{_count:{select:{appointments:true}}},orderBy:{name:'asc'}})}
-@Get('employees')employees(@Req()r:any){return this.db.employee.findMany({where:{barbershopId:this.tenant(r),deletedAt:null},orderBy:{name:'asc'}})}
-@Get('services')services(@Req()r:any){return this.db.service.findMany({where:{barbershopId:this.tenant(r),deletedAt:null},orderBy:{name:'asc'}})}
-@Get('products')products(@Req()r:any){return this.db.product.findMany({where:{barbershopId:this.tenant(r),deletedAt:null},orderBy:{name:'asc'}})}
-@Get('appointments')appointments(@Req()r:any){const id=this.tenant(r);const start=new Date();start.setHours(0,0,0,0);const end=new Date(start);end.setDate(end.getDate()+7);return this.db.appointment.findMany({where:{barbershopId:id,startAt:{gte:start,lt:end}},include:{customer:true,employee:true,services:{include:{service:true}}},orderBy:{startAt:'asc'}})}
-@Get('dashboard')async dashboard(@Req()r:any){const id=this.tenant(r);const now=new Date(),today=new Date(now);today.setHours(0,0,0,0);const tomorrow=new Date(today);tomorrow.setDate(tomorrow.getDate()+1);const month=new Date(now.getFullYear(),now.getMonth(),1);const [todaySales,monthSales,appointments,customers,cash]=await Promise.all([this.db.sale.aggregate({where:{barbershopId:id,createdAt:{gte:today,lt:tomorrow}},_sum:{total:true},_avg:{total:true}}),this.db.sale.aggregate({where:{barbershopId:id,createdAt:{gte:month}},_sum:{total:true}}),this.db.appointment.findMany({where:{barbershopId:id,startAt:{gte:today,lt:tomorrow}},include:{customer:true,employee:true,services:{include:{service:true}}},orderBy:{startAt:'asc'}}),this.db.appointment.count({where:{barbershopId:id,startAt:{gte:today,lt:tomorrow},status:'COMPLETED'}}),this.db.cashRegister.findFirst({where:{barbershopId:id,closedAt:null},orderBy:{openedAt:'desc'}})]);return{metrics:{todayRevenue:Number(todaySales._sum.total||0),monthRevenue:Number(monthSales._sum.total||0),todayAppointments:appointments.length,todayCustomers:customers,cashBalance:Number(cash?.openingBalance||0),averageTicket:Number(todaySales._avg.total||0)},appointments:appointments.slice(0,5).map(a=>({time:a.startAt.toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}),customer:a.customer.name,employee:a.employee.name,service:a.services.map(s=>s.service.name).join(', '),status:a.status})),chart:[]}}
+import { Controller, Get, UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { Role } from '@prisma/client';
+import { DataService } from './data.service';
+import { Permissions, PermissionsGuard, RequirePermissions, Roles, RolesGuard } from './rbac';
+
+@Controller()
+@Roles(Role.ADMIN, Role.RECEPTIONIST, Role.BARBER)
+@UseGuards(AuthGuard('jwt'), RolesGuard, PermissionsGuard)
+export class DataController {
+  constructor(private readonly data: DataService) {}
+
+  @Get('customers')
+  @RequirePermissions(Permissions.CUSTOMERS_READ)
+  customers() {
+    return this.data.customers();
+  }
+
+  @Get('employees')
+  @RequirePermissions(Permissions.EMPLOYEES_READ)
+  employees() {
+    return this.data.employees();
+  }
+
+  @Get('services')
+  @RequirePermissions(Permissions.SERVICES_READ)
+  services() {
+    return this.data.services();
+  }
+
+  @Get('products')
+  @RequirePermissions(Permissions.PRODUCTS_READ)
+  products() {
+    return this.data.products();
+  }
+
+  @Get('appointments')
+  @RequirePermissions(Permissions.APPOINTMENTS_READ)
+  appointments() {
+    return this.data.appointments();
+  }
+
+  @Get('dashboard')
+  @RequirePermissions(Permissions.DASHBOARD_READ)
+  dashboard() {
+    return this.data.dashboard();
+  }
 }

@@ -1,11 +1,20 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { api, setAccessToken } from './api';
-type User = { id: string; name: string; email: string; role: string; barbershop?: string };
+import type { PermissionKey } from './permissions';
+type User = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  barbershop?: string;
+  permissions: string[];
+};
 type AuthValue = {
   user: User | null;
   loading: boolean;
   login(email: string, password: string): Promise<void>;
   logout(): Promise<void>;
+  can(permission: PermissionKey): boolean;
 };
 const AuthContext = createContext<AuthValue | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -37,8 +46,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(null);
     }
   }
+  function can(permission: PermissionKey) {
+    return Boolean(user?.permissions?.includes(permission));
+  }
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>
+    <AuthContext.Provider value={{ user, loading, login, logout, can }}>
+      {children}
+    </AuthContext.Provider>
   );
 }
 export function useAuth() {

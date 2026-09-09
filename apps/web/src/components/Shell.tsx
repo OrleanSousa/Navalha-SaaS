@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { Permissions, type PermissionKey } from '../lib/permissions';
 import {
   LayoutDashboard,
   CalendarDays,
@@ -22,22 +23,22 @@ import {
   X,
 } from 'lucide-react';
 const items = [
-  ['/', 'Visão geral', LayoutDashboard],
-  ['/agenda', 'Agenda', CalendarDays],
+  ['/', 'Visão geral', LayoutDashboard, Permissions.DASHBOARD_READ],
+  ['/agenda', 'Agenda', CalendarDays, Permissions.APPOINTMENTS_READ],
   ['/atendimentos', 'Atendimentos', Scissors],
-  ['/clientes', 'Clientes', Users],
-  ['/colaboradores', 'Colaboradores', UserRound],
-  ['/servicos', 'Serviços', Scissors],
-  ['/produtos', 'Produtos', Package],
+  ['/clientes', 'Clientes', Users, Permissions.CUSTOMERS_READ],
+  ['/colaboradores', 'Colaboradores', UserRound, Permissions.EMPLOYEES_READ],
+  ['/servicos', 'Serviços', Scissors, Permissions.SERVICES_READ],
+  ['/produtos', 'Produtos', Package, Permissions.PRODUCTS_READ],
   ['/estoque', 'Estoque', Warehouse],
   ['/vendas', 'Vendas', ReceiptText],
   ['/financeiro', 'Financeiro', WalletCards],
   ['/comissoes', 'Comissões', BadgeDollarSign],
   ['/relatorios', 'Relatórios', ChartNoAxesCombined],
   ['/configuracoes', 'Configurações', Settings],
-] as const;
+] as ReadonlyArray<readonly [string, string, typeof LayoutDashboard, PermissionKey?]>;
 export function Shell() {
-  const { user, logout } = useAuth();
+  const { user, logout, can } = useAuth();
   const [open, setOpen] = useState(false);
   const loc = useLocation();
   const title = items.find((x) => x[0] === loc.pathname)?.[1] || 'Navalha';
@@ -64,13 +65,15 @@ export function Shell() {
           </div>
         </div>
         <nav>
-          {items.map(([to, label, Icon]) => (
-            <NavLink to={to} end={to === '/'} onClick={() => setOpen(false)} key={to}>
-              <Icon />
-              <span>{label}</span>
-              {label === 'Agenda' && <em>8</em>}
-            </NavLink>
-          ))}
+          {items
+            .filter(([, , , permission]) => !permission || can(permission))
+            .map(([to, label, Icon]) => (
+              <NavLink to={to} end={to === '/'} onClick={() => setOpen(false)} key={to}>
+                <Icon />
+                <span>{label}</span>
+                {label === 'Agenda' && <em>8</em>}
+              </NavLink>
+            ))}
         </nav>
         <div className="profile">
           <span>{(user?.name || 'Admin').slice(0, 2).toUpperCase()}</span>
@@ -101,20 +104,25 @@ export function Shell() {
               <Bell />
               <i />
             </button>
-            <button className="primary">
-              <Plus /> Novo agendamento
-            </button>
+            {can(Permissions.APPOINTMENTS_CREATE) && (
+              <button className="primary">
+                <Plus /> Novo agendamento
+              </button>
+            )}
           </div>
         </header>
         <Outlet />
       </main>
       <nav className="bottom-nav">
-        {items.slice(0, 5).map(([to, label, Icon]) => (
-          <NavLink to={to} end={to === '/'} key={to}>
-            <Icon />
-            <small>{label}</small>
-          </NavLink>
-        ))}
+        {items
+          .filter(([, , , permission]) => !permission || can(permission))
+          .slice(0, 5)
+          .map(([to, label, Icon]) => (
+            <NavLink to={to} end={to === '/'} key={to}>
+              <Icon />
+              <small>{label}</small>
+            </NavLink>
+          ))}
       </nav>
     </div>
   );

@@ -20,6 +20,8 @@ import type { Request, Response } from 'express';
 import * as bcrypt from 'bcrypt';
 import { createHash, randomBytes } from 'node:crypto';
 import { PrismaService } from './prisma.service';
+import { AuthenticatedUser, CurrentUser } from './auth-context';
+import { Role } from '@prisma/client';
 
 const COOKIE = 'navalha_refresh';
 const REFRESH_DAYS = 7;
@@ -76,22 +78,49 @@ export class AuthService {
   private hash(token: string) {
     return createHash('sha256').update(token).digest('hex');
   }
-  private publicUser(user: any) {
+  private publicUser(user: any, permissions: string[]) {
     return {
       id: user.id,
       name: user.name,
       email: user.email,
       role: user.role,
       barbershop: user.barbershop?.name,
+      permissions,
     };
   }
-  private access(user: any) {
+  private access(user: any, permissions: string[]) {
     return this.jwt.signAsync(
-      { sub: user.id, barbershopId: user.barbershopId, role: user.role, name: user.name },
+      {
+        sub: user.id,
+        barbershopId: user.barbershopId,
+        role: user.role,
+        name: user.name,
+        permissions,
+      },
       { expiresIn: '15m' },
     );
   }
+  private assertBarbershopAccess(barbershop: any) {
+    if (!barbershop) return;
+    if (['SUSPENDED', 'CANCELLED'].includes(barbershop.status)) {
+      throw new UnauthorizedException('Barbearia indisponível');
+    }
+    const subscription = barbershop.subscription;
+    if (!subscription || !['ACTIVE', 'TRIAL'].includes(subscription.status)) {
+      throw new UnauthorizedException('Assinatura indisponível');
+    }
+    const deadline =
+      subscription.status === 'TRIAL' ? subscription.trialEndsAt : subscription.expiresAt;
+    if (deadline && deadline <= new Date()) {
+      throw new UnauthorizedException('Assinatura expirada');
+    }
+  }
   async createSession(user: any, request: Request) {
+    const rolePermissions = await this.db.rolePermission.findMany({
+      where: { role: user.role as Role },
+      select: { permission: { select: { key: true } } },
+    });
+    const permissions = rolePermissions.map(({ permission }: any) => permission.key);
     const refreshToken = randomBytes(48).toString('base64url');
     const expiresAt = new Date(Date.now() + REFRESH_DAYS * 86400000);
     await this.db.session.create({
@@ -106,19 +135,18 @@ export class AuthService {
     return {
       refreshToken,
       expiresAt,
-      accessToken: await this.access(user),
-      user: this.publicUser(user),
+      accessToken: await this.access(user, permissions),
+      user: this.publicUser(user, permissions),
     };
   }
   async login(dto: LoginDto, request: Request) {
     const user = await this.db.user.findUnique({
       where: { email: dto.email.toLowerCase() },
-      include: { barbershop: true },
+      include: { barbershop: { include: { subscription: true } } },
     });
     if (!user || !user.active || !(await bcrypt.compare(dto.password, user.passwordHash)))
       throw new UnauthorizedException('Credenciais inválidas');
-    if (user.barbershop && ['SUSPENDED', 'CANCELLED'].includes(user.barbershop.status))
-      throw new UnauthorizedException('Barbearia indisponível');
+    this.assertBarbershopAccess(user.barbershop);
     await this.db.auditLog.create({
       data: {
         userId: user.id,
@@ -134,10 +162,11 @@ export class AuthService {
     if (!raw) throw new UnauthorizedException('Sessão ausente');
     const session = await this.db.session.findUnique({
       where: { tokenHash: this.hash(raw) },
-      include: { user: { include: { barbershop: true } } },
+      include: { user: { include: { barbershop: { include: { subscription: true } } } } },
     });
     if (!session || session.revokedAt || session.expiresAt <= new Date() || !session.user.active)
       throw new UnauthorizedException('Sessão inválida ou expirada');
+    this.assertBarbershopAccess(session.user.barbershop);
     await this.db.session.update({ where: { id: session.id }, data: { revokedAt: new Date() } });
     return this.createSession(session.user, request);
   }
@@ -283,13 +312,15 @@ export class AuthController {
     await this.auth.logout(req.cookies?.[COOKIE]);
     res.clearCookie(COOKIE, { path: '/api/auth' });
   }
-  @Get('me') @UseGuards(AuthGuard('jwt')) me(@Req() req: any) {
-    return req.user;
+  @Get('me')
+  @UseGuards(AuthGuard('jwt'))
+  me(@CurrentUser() user: AuthenticatedUser) {
+    return user;
   }
   @Post('change-password')
   @HttpCode(204)
   @UseGuards(AuthGuard('jwt'))
-  async changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
-    await this.auth.changePassword(req.user.sub, dto);
+  async changePassword(@CurrentUser() user: AuthenticatedUser, @Body() dto: ChangePasswordDto) {
+    await this.auth.changePassword(user.sub, dto);
   }
 }

@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../lib/api';
 import { ChevronLeft, ChevronRight, Filter, Plus } from 'lucide-react';
+import { useAuth } from '../lib/auth';
+import { Permissions } from '../lib/permissions';
 export function Agenda() {
+  const { can } = useAuth();
   const { data: events = [] } = useQuery({
     queryKey: ['appointments'],
     queryFn: async () => (await api.get('/appointments')).data,
@@ -26,9 +29,11 @@ export function Agenda() {
         <button className="outline">
           <Filter /> Filtrar
         </button>
-        <button className="primary">
-          <Plus /> Novo agendamento
-        </button>
+        {can(Permissions.APPOINTMENTS_CREATE) && (
+          <button className="primary">
+            <Plus /> Novo agendamento
+          </button>
+        )}
       </div>
       <div className="calendar card">
         <div className="calendar-head">

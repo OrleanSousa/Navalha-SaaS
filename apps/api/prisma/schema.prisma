@@ -1,22 +1,26 @@
 generator client {
   provider = "prisma-client-js"
 }
+
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
+
 enum BarbershopStatus {
   ACTIVE
   SUSPENDED
   CANCELLED
   TRIAL
 }
+
 enum Role {
   SUPER_ADMIN
   ADMIN
   RECEPTIONIST
   BARBER
 }
+
 enum AppointmentStatus {
   SCHEDULED
   CONFIRMED
@@ -25,6 +29,7 @@ enum AppointmentStatus {
   CANCELLED
   NO_SHOW
 }
+
 enum MovementType {
   ENTRY
   SALE
@@ -32,6 +37,7 @@ enum MovementType {
   LOSS
   RETURN
 }
+
 enum PaymentMethod {
   CASH
   PIX
@@ -39,408 +45,569 @@ enum PaymentMethod {
   CREDIT_CARD
   OTHER
 }
+
 enum FinancialType {
   INCOME
   EXPENSE
 }
+
 enum FinancialStatus {
   PAID
   PENDING
   CANCELLED
 }
+
 enum CommissionStatus {
   PENDING
   PAID
 }
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  SUSPENDED
+  CANCELLED
+  EXPIRED
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  OVERDUE
+  CANCELLED
+  REFUNDED
+}
+
+enum BillingPaymentStatus {
+  CONFIRMED
+  REFUNDED
+}
+
+enum BillingPaymentMethod {
+  PIX
+  BOLETO
+  CREDIT_CARD
+  DEBIT_CARD
+  BANK_TRANSFER
+  OTHER
+}
+
 model Plan {
-  id String @id @default(uuid())
-  name String @unique
-  price Decimal @db.Decimal(10, 2)
-  maxEmployees Int
-  maxUsers Int
-  features Json
-  active Boolean @default(true)
+  id            String         @id @default(uuid())
+  name          String         @unique
+  price         Decimal        @db.Decimal(10, 2)
+  maxEmployees  Int
+  maxUsers      Int
+  features      Json
+  active        Boolean        @default(true)
   subscriptions Subscription[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 }
+
 model Subscription {
-  id String @id @default(uuid())
-  barbershopId String @unique
-  planId String
-  status String
-  startedAt DateTime @default(now())
-  expiresAt DateTime?
-  trialEndsAt DateTime?
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  plan Plan @relation(fields: [planId], references: [id])
+  id           String                @id @default(uuid())
+  barbershopId String                @unique
+  planId       String
+  status       SubscriptionStatus    @default(TRIAL)
+  startedAt    DateTime              @default(now())
+  expiresAt    DateTime?
+  trialEndsAt  DateTime?
+  barbershop   Barbershop            @relation(fields: [barbershopId], references: [id])
+  plan         Plan                  @relation(fields: [planId], references: [id])
+  history      SubscriptionHistory[]
+  invoices     SubscriptionInvoice[]
 }
+
+model SubscriptionHistory {
+  id             String              @id @default(uuid())
+  subscriptionId String
+  barbershopId   String
+  actorId        String?
+  action         String
+  fromPlanId     String?
+  toPlanId       String?
+  fromStatus     SubscriptionStatus?
+  toStatus       SubscriptionStatus?
+  effectiveAt    DateTime            @default(now())
+  metadata       Json?
+  subscription   Subscription        @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  createdAt      DateTime            @default(now())
+
+  @@index([barbershopId, createdAt])
+  @@index([subscriptionId, createdAt])
+}
+
+model SubscriptionInvoice {
+  id             String                @id @default(uuid())
+  number         String                @unique
+  barbershopId   String
+  subscriptionId String
+  amount         Decimal               @db.Decimal(10, 2)
+  discount       Decimal               @default(0) @db.Decimal(10, 2)
+  total          Decimal               @db.Decimal(10, 2)
+  dueDate        DateTime
+  paidAt         DateTime?
+  status         InvoiceStatus         @default(PENDING)
+  notes          String?
+  externalId     String?
+  subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  barbershop     Barbershop            @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  payments       SubscriptionPayment[]
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@index([barbershopId, dueDate])
+  @@index([status, dueDate])
+  @@index([subscriptionId])
+}
+
+model SubscriptionPayment {
+  id                String               @id @default(uuid())
+  invoiceId         String
+  actorId           String?
+  amount            Decimal              @db.Decimal(10, 2)
+  method            BillingPaymentMethod
+  status            BillingPaymentStatus @default(CONFIRMED)
+  paidAt            DateTime             @default(now())
+  externalReference String?
+  notes             String?
+  invoice           SubscriptionInvoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  @@index([invoiceId, paidAt])
+  @@index([externalReference])
+}
+
 model Barbershop {
-  id String @id @default(uuid())
-  name String
-  tradeName String?
-  slug String @unique
-  document String?
-  ownerName String
-  phone String?
-  whatsapp String?
-  email String?
-  address String?
-  city String?
-  state String?
-  zipCode String?
-  logoUrl String?
-  primaryColor String @default("#B8832B")
-  status BarbershopStatus @default(TRIAL)
-  users User[]
-  employees Employee[]
-  customers Customer[]
-  services Service[]
-  products Product[]
-  appointments Appointment[]
-  sales Sale[]
+  id                    String                 @id @default(uuid())
+  name                  String
+  tradeName             String?
+  slug                  String                 @unique
+  document              String?
+  ownerName             String
+  phone                 String?
+  whatsapp              String?
+  email                 String?
+  address               String?
+  city                  String?
+  state                 String?
+  zipCode               String?
+  logoUrl               String?
+  primaryColor          String                 @default("#B8832B")
+  status                BarbershopStatus       @default(TRIAL)
+  users                 User[]
+  employees             Employee[]
+  customers             Customer[]
+  services              Service[]
+  products              Product[]
+  appointments          Appointment[]
+  sales                 Sale[]
   financialTransactions FinancialTransaction[]
-  cashRegisters CashRegister[]
-  commissions Commission[]
-  notifications Notification[]
-  auditLogs AuditLog[]
-  subscription Subscription?
-  settings Setting?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  cashRegisters         CashRegister[]
+  commissions           Commission[]
+  notifications         Notification[]
+  auditLogs             AuditLog[]
+  subscriptionInvoices  SubscriptionInvoice[]
+  subscription          Subscription?
+  settings              Setting?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  deletedAt             DateTime?
 }
+
 model Session {
-  id String @id @default(uuid())
-  userId String
-  tokenHash String @unique
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
   expiresAt DateTime
   revokedAt DateTime?
   userAgent String?
-  ip String?
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  ip        String?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
   @@index([userId, expiresAt])
 }
+
 model PasswordResetToken {
-  id String @id @default(uuid())
-  userId String
-  tokenHash String @unique
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
   expiresAt DateTime
-  usedAt DateTime?
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  usedAt    DateTime?
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+
   @@index([userId, expiresAt])
 }
+
 model User {
-  id String @id @default(uuid())
-  barbershopId String?
-  email String @unique
-  passwordHash String
-  name String
-  role Role @default(RECEPTIONIST)
-  active Boolean @default(true)
-  employee Employee?
-  barbershop Barbershop? @relation(fields: [barbershopId], references: [id])
-  inventoryMovements InventoryMovement[]
-  cashRegisters CashRegister[]
-  auditLogs AuditLog[]
-  sessions Session[]
+  id                  String               @id @default(uuid())
+  barbershopId        String?
+  email               String               @unique
+  passwordHash        String
+  name                String
+  role                Role                 @default(RECEPTIONIST)
+  active              Boolean              @default(true)
+  employee            Employee?
+  barbershop          Barbershop?          @relation(fields: [barbershopId], references: [id])
+  inventoryMovements  InventoryMovement[]
+  cashRegisters       CashRegister[]
+  auditLogs           AuditLog[]
+  sessions            Session[]
   passwordResetTokens PasswordResetToken[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+
   @@index([barbershopId])
 }
+
+model Permission {
+  id              String           @id @default(uuid())
+  key             String           @unique
+  description     String
+  rolePermissions RolePermission[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model RolePermission {
+  role         Role
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@id([role, permissionId])
+  @@index([permissionId])
+}
+
 model Employee {
-  id String @id @default(uuid())
-  barbershopId String
-  userId String? @unique
-  name String
-  cpf String?
-  birthDate DateTime?
-  phone String?
-  whatsapp String?
-  email String?
-  address String?
-  photoUrl String?
-  position String?
-  hiredAt DateTime?
-  color String @default("#4F7CAC")
-  active Boolean @default(true)
-  defaultCommission Decimal @default(0) @db.Decimal(5, 2)
-  notes String?
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  user User? @relation(fields: [userId], references: [id])
-  appointments Appointment[]
-  employeeServices EmployeeService[]
-  sales Sale[]
-  commissions Commission[]
-  schedules WorkSchedule[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  id                String            @id @default(uuid())
+  barbershopId      String
+  userId            String?           @unique
+  name              String
+  cpf               String?
+  birthDate         DateTime?
+  phone             String?
+  whatsapp          String?
+  email             String?
+  address           String?
+  photoUrl          String?
+  position          String?
+  hiredAt           DateTime?
+  color             String            @default("#4F7CAC")
+  active            Boolean           @default(true)
+  defaultCommission Decimal           @default(0) @db.Decimal(5, 2)
+  notes             String?
+  barbershop        Barbershop        @relation(fields: [barbershopId], references: [id])
+  user              User?             @relation(fields: [userId], references: [id])
+  appointments      Appointment[]
+  employeeServices  EmployeeService[]
+  sales             Sale[]
+  commissions       Commission[]
+  schedules         WorkSchedule[]
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  deletedAt         DateTime?
+
   @@index([barbershopId, name])
 }
+
 model WorkSchedule {
-  id String @id @default(uuid())
+  id           String   @id @default(uuid())
   barbershopId String
-  employeeId String
-  weekday Int
-  startTime String
-  endTime String
-  breakStart String?
-  breakEnd String?
-  active Boolean @default(true)
-  employee Employee @relation(fields: [employeeId], references: [id])
+  employeeId   String
+  weekday      Int
+  startTime    String
+  endTime      String
+  breakStart   String?
+  breakEnd     String?
+  active       Boolean  @default(true)
+  employee     Employee @relation(fields: [employeeId], references: [id])
+
   @@unique([employeeId, weekday, startTime])
   @@index([barbershopId])
 }
+
 model Customer {
-  id String @id @default(uuid())
+  id           String        @id @default(uuid())
   barbershopId String
-  name String
-  phone String
-  whatsapp String?
-  email String?
-  cpf String?
-  birthDate DateTime?
-  notes String?
+  name         String
+  phone        String
+  whatsapp     String?
+  email        String?
+  cpf          String?
+  birthDate    DateTime?
+  notes        String?
   appointments Appointment[]
-  sales Sale[]
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  sales        Sale[]
+  barbershop   Barbershop    @relation(fields: [barbershopId], references: [id])
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
+
   @@index([barbershopId, name])
   @@index([barbershopId, phone])
 }
+
 model Service {
-  id String @id @default(uuid())
-  barbershopId String
-  name String
-  description String?
-  category String?
-  price Decimal @db.Decimal(10, 2)
-  durationMinutes Int
-  commissionPercent Decimal? @db.Decimal(5, 2)
-  active Boolean @default(true)
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  employeeServices EmployeeService[]
+  id                  String               @id @default(uuid())
+  barbershopId        String
+  name                String
+  description         String?
+  category            String?
+  price               Decimal              @db.Decimal(10, 2)
+  durationMinutes     Int
+  commissionPercent   Decimal?             @db.Decimal(5, 2)
+  active              Boolean              @default(true)
+  barbershop          Barbershop           @relation(fields: [barbershopId], references: [id])
+  employeeServices    EmployeeService[]
   appointmentServices AppointmentService[]
-  saleItems SaleItem[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  saleItems           SaleItem[]
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  deletedAt           DateTime?
+
   @@index([barbershopId, name])
 }
+
 model EmployeeService {
-  id String @id @default(uuid())
-  barbershopId String
-  employeeId String
-  serviceId String
+  id                String   @id @default(uuid())
+  barbershopId      String
+  employeeId        String
+  serviceId         String
   commissionPercent Decimal? @db.Decimal(5, 2)
-  commissionFixed Decimal? @db.Decimal(10, 2)
-  employee Employee @relation(fields: [employeeId], references: [id])
-  service Service @relation(fields: [serviceId], references: [id])
+  commissionFixed   Decimal? @db.Decimal(10, 2)
+  employee          Employee @relation(fields: [employeeId], references: [id])
+  service           Service  @relation(fields: [serviceId], references: [id])
+
   @@unique([employeeId, serviceId])
   @@index([barbershopId])
 }
+
 model Product {
-  id String @id @default(uuid())
-  barbershopId String
-  name String
-  description String?
-  category String?
-  sku String?
-  barcode String?
-  costPrice Decimal @db.Decimal(10, 2)
-  salePrice Decimal @db.Decimal(10, 2)
-  stockQuantity Int @default(0)
-  minimumStock Int @default(0)
-  commissionPercent Decimal? @db.Decimal(5, 2)
-  active Boolean @default(true)
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  movements InventoryMovement[]
-  saleItems SaleItem[]
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  deletedAt DateTime?
+  id                String              @id @default(uuid())
+  barbershopId      String
+  name              String
+  description       String?
+  category          String?
+  sku               String?
+  barcode           String?
+  costPrice         Decimal             @db.Decimal(10, 2)
+  salePrice         Decimal             @db.Decimal(10, 2)
+  stockQuantity     Int                 @default(0)
+  minimumStock      Int                 @default(0)
+  commissionPercent Decimal?            @db.Decimal(5, 2)
+  active            Boolean             @default(true)
+  barbershop        Barbershop          @relation(fields: [barbershopId], references: [id])
+  movements         InventoryMovement[]
+  saleItems         SaleItem[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+  deletedAt         DateTime?
+
   @@unique([barbershopId, sku])
   @@index([barbershopId, name])
 }
+
 model InventoryMovement {
-  id String @id @default(uuid())
+  id           String       @id @default(uuid())
   barbershopId String
-  productId String
-  userId String
-  type MovementType
-  quantity Int
-  reason String?
-  product Product @relation(fields: [productId], references: [id])
-  user User @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
+  productId    String
+  userId       String
+  type         MovementType
+  quantity     Int
+  reason       String?
+  product      Product      @relation(fields: [productId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+  createdAt    DateTime     @default(now())
+
   @@index([barbershopId, createdAt])
 }
+
 model Appointment {
-  id String @id @default(uuid())
+  id           String               @id @default(uuid())
   barbershopId String
-  customerId String
-  employeeId String
-  startAt DateTime
-  endAt DateTime
-  status AppointmentStatus @default(SCHEDULED)
-  price Decimal @db.Decimal(10, 2)
-  notes String?
-  customer Customer @relation(fields: [customerId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  services AppointmentService[]
-  sale Sale?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  customerId   String
+  employeeId   String
+  startAt      DateTime
+  endAt        DateTime
+  status       AppointmentStatus    @default(SCHEDULED)
+  price        Decimal              @db.Decimal(10, 2)
+  notes        String?
+  customer     Customer             @relation(fields: [customerId], references: [id])
+  employee     Employee             @relation(fields: [employeeId], references: [id])
+  barbershop   Barbershop           @relation(fields: [barbershopId], references: [id])
+  services     AppointmentService[]
+  sale         Sale?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+
   @@index([barbershopId, startAt])
   @@index([employeeId, startAt, endAt])
 }
+
 model AppointmentService {
-  id String @id @default(uuid())
-  barbershopId String
-  appointmentId String
-  serviceId String
-  price Decimal @db.Decimal(10, 2)
+  id              String      @id @default(uuid())
+  barbershopId    String
+  appointmentId   String
+  serviceId       String
+  price           Decimal     @db.Decimal(10, 2)
   durationMinutes Int
-  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  service Service @relation(fields: [serviceId], references: [id])
+  appointment     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  service         Service     @relation(fields: [serviceId], references: [id])
+
   @@unique([appointmentId, serviceId])
   @@index([barbershopId])
 }
+
 model Sale {
-  id String @id @default(uuid())
-  barbershopId String
-  appointmentId String? @unique
-  customerId String?
-  employeeId String?
-  subtotal Decimal @db.Decimal(10, 2)
-  discount Decimal @default(0) @db.Decimal(10, 2)
-  total Decimal @db.Decimal(10, 2)
-  appointment Appointment? @relation(fields: [appointmentId], references: [id])
-  customer Customer? @relation(fields: [customerId], references: [id])
-  employee Employee? @relation(fields: [employeeId], references: [id])
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  items SaleItem[]
-  payments Payment[]
-  commissions Commission[]
-  createdAt DateTime @default(now())
+  id            String       @id @default(uuid())
+  barbershopId  String
+  appointmentId String?      @unique
+  customerId    String?
+  employeeId    String?
+  subtotal      Decimal      @db.Decimal(10, 2)
+  discount      Decimal      @default(0) @db.Decimal(10, 2)
+  total         Decimal      @db.Decimal(10, 2)
+  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
+  customer      Customer?    @relation(fields: [customerId], references: [id])
+  employee      Employee?    @relation(fields: [employeeId], references: [id])
+  barbershop    Barbershop   @relation(fields: [barbershopId], references: [id])
+  items         SaleItem[]
+  payments      Payment[]
+  commissions   Commission[]
+  createdAt     DateTime     @default(now())
+
   @@index([barbershopId, createdAt])
 }
+
 model SaleItem {
-  id String @id @default(uuid())
+  id           String   @id @default(uuid())
   barbershopId String
-  saleId String
-  serviceId String?
-  productId String?
-  description String
-  quantity Int
-  unitPrice Decimal @db.Decimal(10, 2)
-  total Decimal @db.Decimal(10, 2)
-  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  service Service? @relation(fields: [serviceId], references: [id])
-  product Product? @relation(fields: [productId], references: [id])
+  saleId       String
+  serviceId    String?
+  productId    String?
+  description  String
+  quantity     Int
+  unitPrice    Decimal  @db.Decimal(10, 2)
+  total        Decimal  @db.Decimal(10, 2)
+  sale         Sale     @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  service      Service? @relation(fields: [serviceId], references: [id])
+  product      Product? @relation(fields: [productId], references: [id])
+
   @@index([barbershopId])
 }
+
 model Payment {
-  id String @id @default(uuid())
+  id           String        @id @default(uuid())
   barbershopId String
-  saleId String
-  method PaymentMethod
-  amount Decimal @db.Decimal(10, 2)
-  sale Sale @relation(fields: [saleId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
+  saleId       String
+  method       PaymentMethod
+  amount       Decimal       @db.Decimal(10, 2)
+  sale         Sale          @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now())
+
   @@index([barbershopId])
 }
+
 model Commission {
-  id String @id @default(uuid())
+  id           String           @id @default(uuid())
   barbershopId String
-  saleId String
-  employeeId String
-  amount Decimal @db.Decimal(10, 2)
-  percentage Decimal? @db.Decimal(5, 2)
-  status CommissionStatus @default(PENDING)
-  paidAt DateTime?
-  notes String?
-  sale Sale @relation(fields: [saleId], references: [id])
-  employee Employee @relation(fields: [employeeId], references: [id])
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  createdAt DateTime @default(now())
+  saleId       String
+  employeeId   String
+  amount       Decimal          @db.Decimal(10, 2)
+  percentage   Decimal?         @db.Decimal(5, 2)
+  status       CommissionStatus @default(PENDING)
+  paidAt       DateTime?
+  notes        String?
+  sale         Sale             @relation(fields: [saleId], references: [id])
+  employee     Employee         @relation(fields: [employeeId], references: [id])
+  barbershop   Barbershop       @relation(fields: [barbershopId], references: [id])
+  createdAt    DateTime         @default(now())
+
   @@unique([saleId, employeeId])
   @@index([barbershopId, status])
 }
+
 model CashRegister {
-  id String @id @default(uuid())
-  barbershopId String
-  openedById String
-  openingBalance Decimal @db.Decimal(10, 2)
-  closingBalance Decimal? @db.Decimal(10, 2)
-  expectedBalance Decimal? @db.Decimal(10, 2)
-  difference Decimal? @db.Decimal(10, 2)
-  openedAt DateTime @default(now())
-  closedAt DateTime?
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  openedBy User @relation(fields: [openedById], references: [id])
-  transactions FinancialTransaction[]
+  id              String                 @id @default(uuid())
+  barbershopId    String
+  openedById      String
+  openingBalance  Decimal                @db.Decimal(10, 2)
+  closingBalance  Decimal?               @db.Decimal(10, 2)
+  expectedBalance Decimal?               @db.Decimal(10, 2)
+  difference      Decimal?               @db.Decimal(10, 2)
+  openedAt        DateTime               @default(now())
+  closedAt        DateTime?
+  barbershop      Barbershop             @relation(fields: [barbershopId], references: [id])
+  openedBy        User                   @relation(fields: [openedById], references: [id])
+  transactions    FinancialTransaction[]
+
   @@index([barbershopId, openedAt])
 }
+
 model FinancialTransaction {
-  id String @id @default(uuid())
-  barbershopId String
+  id             String          @id @default(uuid())
+  barbershopId   String
   cashRegisterId String?
-  type FinancialType
-  category String
-  description String
-  amount Decimal @db.Decimal(10, 2)
-  method PaymentMethod?
-  status FinancialStatus @default(PAID)
-  dueDate DateTime?
-  paidAt DateTime?
-  notes String?
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  cashRegister CashRegister? @relation(fields: [cashRegisterId], references: [id])
-  createdAt DateTime @default(now())
+  type           FinancialType
+  category       String
+  description    String
+  amount         Decimal         @db.Decimal(10, 2)
+  method         PaymentMethod?
+  status         FinancialStatus @default(PAID)
+  dueDate        DateTime?
+  paidAt         DateTime?
+  notes          String?
+  barbershop     Barbershop      @relation(fields: [barbershopId], references: [id])
+  cashRegister   CashRegister?   @relation(fields: [cashRegisterId], references: [id])
+  createdAt      DateTime        @default(now())
+
   @@index([barbershopId, createdAt])
 }
+
 model Notification {
-  id String @id @default(uuid())
+  id           String     @id @default(uuid())
   barbershopId String
-  title String
-  message String
-  type String
-  readAt DateTime?
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  createdAt DateTime @default(now())
+  title        String
+  message      String
+  type         String
+  readAt       DateTime?
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id])
+  createdAt    DateTime   @default(now())
+
   @@index([barbershopId, readAt])
 }
+
 model AuditLog {
-  id String @id @default(uuid())
+  id           String      @id @default(uuid())
   barbershopId String?
-  userId String?
-  action String
-  entity String
-  entityId String?
-  before Json?
-  after Json?
-  ip String?
-  barbershop Barbershop? @relation(fields: [barbershopId], references: [id])
-  user User? @relation(fields: [userId], references: [id])
-  createdAt DateTime @default(now())
+  userId       String?
+  action       String
+  entity       String
+  entityId     String?
+  before       Json?
+  after        Json?
+  ip           String?
+  barbershop   Barbershop? @relation(fields: [barbershopId], references: [id])
+  user         User?       @relation(fields: [userId], references: [id])
+  createdAt    DateTime    @default(now())
+
   @@index([barbershopId, createdAt])
 }
+
 model Setting {
-  id String @id @default(uuid())
-  barbershopId String @unique
-  currency String @default("BRL")
-  timezone String @default("America/Sao_Paulo")
-  allowNegativeStock Boolean @default(false)
-  publicBooking Boolean @default(true)
-  openingHours Json?
-  barbershop Barbershop @relation(fields: [barbershopId], references: [id])
-  updatedAt DateTime @updatedAt
+  id                 String     @id @default(uuid())
+  barbershopId       String     @unique
+  currency           String     @default("BRL")
+  timezone           String     @default("America/Sao_Paulo")
+  allowNegativeStock Boolean    @default(false)
+  publicBooking      Boolean    @default(true)
+  openingHours       Json?
+  barbershop         Barbershop @relation(fields: [barbershopId], references: [id])
+  updatedAt          DateTime   @updatedAt
 }
