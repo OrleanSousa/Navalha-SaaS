@@ -482,7 +482,18 @@ describe('DataService tenant isolation', () => {
   });
 
   it('edita e exclui somente jornada pertencente ao tenant e colaborador', async () => {
-    db.workSchedule.findFirst.mockResolvedValue({ id: 'schedule-1' });
+    db.workSchedule.findFirst
+      .mockResolvedValueOnce({
+        id: 'schedule-1',
+        weekday: 1,
+        startTime: '08:00',
+        endTime: '18:00',
+        breakStart: null,
+        breakEnd: null,
+        active: true,
+      })
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ id: 'schedule-1' });
     db.workSchedule.update.mockResolvedValue({ id: 'schedule-1', endTime: '17:00' });
 
     await service.updateWorkSchedule('employee-1', 'schedule-1', { endTime: '17:00' });
@@ -490,11 +501,26 @@ describe('DataService tenant isolation', () => {
 
     expect(db.workSchedule.findFirst).toHaveBeenCalledWith({
       where: { id: 'schedule-1', employeeId: 'employee-1', barbershopId: 'shop-1' },
-      select: { id: true },
+      select: {
+        id: true,
+        weekday: true,
+        startTime: true,
+        endTime: true,
+        breakStart: true,
+        breakEnd: true,
+        active: true,
+      },
     });
     expect(db.workSchedule.update).toHaveBeenCalledWith({
       where: { id: 'schedule-1' },
-      data: expect.objectContaining({ endTime: '17:00' }),
+      data: {
+        weekday: 1,
+        startTime: '08:00',
+        endTime: '17:00',
+        breakStart: null,
+        breakEnd: null,
+        active: true,
+      },
     });
     expect(db.workSchedule.delete).toHaveBeenCalledWith({ where: { id: 'schedule-1' } });
   });
@@ -510,6 +536,102 @@ describe('DataService tenant isolation', () => {
     );
     expect(db.workSchedule.update).not.toHaveBeenCalled();
     expect(db.workSchedule.delete).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'fim anterior ao início',
+      { weekday: 1, startTime: '18:00', endTime: '08:00', active: true },
+      'O fim da jornada deve ser posterior ao início',
+    ],
+    [
+      'pausa incompleta',
+      {
+        weekday: 1,
+        startTime: '08:00',
+        endTime: '18:00',
+        breakStart: '12:00',
+        active: true,
+      },
+      'Informe o início e o fim da pausa',
+    ],
+    [
+      'pausa invertida',
+      {
+        weekday: 1,
+        startTime: '08:00',
+        endTime: '18:00',
+        breakStart: '13:00',
+        breakEnd: '12:00',
+        active: true,
+      },
+      'O fim da pausa deve ser posterior ao início',
+    ],
+    [
+      'pausa fora da jornada',
+      {
+        weekday: 1,
+        startTime: '08:00',
+        endTime: '18:00',
+        breakStart: '07:30',
+        breakEnd: '08:30',
+        active: true,
+      },
+      'A pausa deve estar dentro da jornada',
+    ],
+  ])('rejeita jornada com %s', async (_, dto, message) => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+
+    await expect(service.createWorkSchedule('employee-1', dto)).rejects.toThrow(message);
+    expect(db.workSchedule.create).not.toHaveBeenCalled();
+  });
+
+  it('rejeita sobreposição entre jornadas ativas no mesmo dia', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.workSchedule.findFirst.mockResolvedValue({ id: 'schedule-existing' });
+
+    await expect(
+      service.createWorkSchedule('employee-1', {
+        weekday: 1,
+        startTime: '12:00',
+        endTime: '19:00',
+        active: true,
+      }),
+    ).rejects.toThrow('A jornada sobrepõe outro horário do colaborador');
+    expect(db.workSchedule.findFirst).toHaveBeenCalledWith({
+      where: {
+        barbershopId: 'shop-1',
+        employeeId: 'employee-1',
+        weekday: 1,
+        active: true,
+        startTime: { lt: '19:00' },
+        endTime: { gt: '12:00' },
+      },
+      select: { id: true },
+    });
+    expect(db.workSchedule.create).not.toHaveBeenCalled();
+  });
+
+  it('permite horários adjacentes e jornadas inativas', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.workSchedule.findFirst.mockResolvedValue(null);
+    db.workSchedule.create.mockResolvedValue({ id: 'schedule-2' });
+
+    await service.createWorkSchedule('employee-1', {
+      weekday: 1,
+      startTime: '18:00',
+      endTime: '20:00',
+      active: true,
+    });
+    await service.createWorkSchedule('employee-1', {
+      weekday: 1,
+      startTime: '12:00',
+      endTime: '14:00',
+      active: false,
+    });
+
+    expect(db.workSchedule.create).toHaveBeenCalledTimes(2);
+    expect(db.workSchedule.findFirst).toHaveBeenCalledTimes(1);
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {

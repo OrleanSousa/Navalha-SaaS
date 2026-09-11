@@ -475,16 +475,21 @@ export class DataService {
     });
     if (!employee) throw new NotFoundException('Colaborador não encontrado');
 
+    const schedule = {
+      weekday: dto.weekday,
+      startTime: dto.startTime,
+      endTime: dto.endTime,
+      breakStart: dto.breakStart || null,
+      breakEnd: dto.breakEnd || null,
+      active: dto.active ?? true,
+    };
+    await this.validateWorkSchedule(employee.id, schedule);
+
     return this.db.workSchedule.create({
       data: {
         barbershopId,
         employeeId: employee.id,
-        weekday: dto.weekday,
-        startTime: dto.startTime,
-        endTime: dto.endTime,
-        breakStart: dto.breakStart || null,
-        breakEnd: dto.breakEnd || null,
-        active: dto.active,
+        ...schedule,
       },
     });
   }
@@ -492,21 +497,77 @@ export class DataService {
   async updateWorkSchedule(employeeId: string, scheduleId: string, dto: UpdateWorkScheduleDto) {
     const schedule = await this.db.workSchedule.findFirst({
       where: { id: scheduleId, employeeId, barbershopId: this.tenant.barbershopId },
-      select: { id: true },
+      select: {
+        id: true,
+        weekday: true,
+        startTime: true,
+        endTime: true,
+        breakStart: true,
+        breakEnd: true,
+        active: true,
+      },
     });
     if (!schedule) throw new NotFoundException('Jornada não encontrada');
 
+    const updatedSchedule = {
+      weekday: dto.weekday ?? schedule.weekday,
+      startTime: dto.startTime ?? schedule.startTime,
+      endTime: dto.endTime ?? schedule.endTime,
+      breakStart: dto.breakStart === undefined ? schedule.breakStart : dto.breakStart || null,
+      breakEnd: dto.breakEnd === undefined ? schedule.breakEnd : dto.breakEnd || null,
+      active: dto.active ?? schedule.active,
+    };
+    await this.validateWorkSchedule(employeeId, updatedSchedule, schedule.id);
+
     return this.db.workSchedule.update({
       where: { id: schedule.id },
-      data: {
-        weekday: dto.weekday,
-        startTime: dto.startTime,
-        endTime: dto.endTime,
-        breakStart: dto.breakStart === undefined ? undefined : dto.breakStart || null,
-        breakEnd: dto.breakEnd === undefined ? undefined : dto.breakEnd || null,
-        active: dto.active,
-      },
+      data: updatedSchedule,
     });
+  }
+
+  private async validateWorkSchedule(
+    employeeId: string,
+    schedule: {
+      weekday: number;
+      startTime: string;
+      endTime: string;
+      breakStart: string | null;
+      breakEnd: string | null;
+      active: boolean;
+    },
+    scheduleId?: string,
+  ) {
+    if (schedule.endTime <= schedule.startTime) {
+      throw new BadRequestException('O fim da jornada deve ser posterior ao início');
+    }
+    if (Boolean(schedule.breakStart) !== Boolean(schedule.breakEnd)) {
+      throw new BadRequestException('Informe o início e o fim da pausa');
+    }
+    if (schedule.breakStart && schedule.breakEnd) {
+      if (schedule.breakEnd <= schedule.breakStart) {
+        throw new BadRequestException('O fim da pausa deve ser posterior ao início');
+      }
+      if (schedule.breakStart < schedule.startTime || schedule.breakEnd > schedule.endTime) {
+        throw new BadRequestException('A pausa deve estar dentro da jornada');
+      }
+    }
+    if (!schedule.active) return;
+
+    const overlap = await this.db.workSchedule.findFirst({
+      where: {
+        barbershopId: this.tenant.barbershopId,
+        employeeId,
+        weekday: schedule.weekday,
+        active: true,
+        startTime: { lt: schedule.endTime },
+        endTime: { gt: schedule.startTime },
+        ...(scheduleId ? { id: { not: scheduleId } } : {}),
+      },
+      select: { id: true },
+    });
+    if (overlap) {
+      throw new ConflictException('A jornada sobrepõe outro horário do colaborador');
+    }
   }
 
   async deleteWorkSchedule(employeeId: string, scheduleId: string) {
