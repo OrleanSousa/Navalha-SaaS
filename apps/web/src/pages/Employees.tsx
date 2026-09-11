@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Mail,
+  Pencil,
   Phone,
   Plus,
   Save,
@@ -24,6 +25,11 @@ type Employee = {
   phone?: string | null;
   whatsapp?: string | null;
   email?: string | null;
+  cpf?: string | null;
+  birthDate?: string | null;
+  address?: string | null;
+  hiredAt?: string | null;
+  notes?: string | null;
   active: boolean;
   color: string;
   defaultCommission: string | number;
@@ -63,6 +69,7 @@ export function Employees() {
   const [position, setPosition] = useState('');
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string>();
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => setPage(1), [search, status, position]);
@@ -84,26 +91,57 @@ export function Employees() {
     placeholderData: (previous) => previous,
   });
 
-  const create = useMutation({
-    mutationFn: () =>
-      api.post('/employees', {
-        ...Object.fromEntries(
-          Object.entries(form).filter(
-            ([key, value]) => key === 'color' || key === 'defaultCommission' || value,
-          ),
-        ),
-        defaultCommission: Number(form.defaultCommission),
-      }),
+  const save = useMutation({
+    mutationFn: () => {
+      const values = editingId
+        ? Object.fromEntries(
+            Object.entries(form).map(([key, value]) => [key, value === '' ? null : value]),
+          )
+        : Object.fromEntries(
+            Object.entries(form).filter(
+              ([key, value]) => key === 'color' || key === 'defaultCommission' || value,
+            ),
+          );
+      const payload = { ...values, defaultCommission: Number(form.defaultCommission) };
+      return editingId
+        ? api.patch(`/employees/${editingId}`, payload)
+        : api.post('/employees', payload);
+    },
     onSuccess: async () => {
-      toast.success('Colaborador cadastrado');
-      setForm(emptyForm);
-      setShowForm(false);
+      toast.success(editingId ? 'Colaborador atualizado' : 'Colaborador cadastrado');
+      closeForm();
       setPage(1);
       await queryClient.invalidateQueries({ queryKey: ['employees'] });
     },
     onError: (error: any) =>
-      toast.error(error.response?.data?.message || 'Não foi possível cadastrar o colaborador'),
+      toast.error(error.response?.data?.message || 'Não foi possível salvar o colaborador'),
   });
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(undefined);
+    setForm(emptyForm);
+  }
+
+  function edit(employee: Employee) {
+    setEditingId(employee.id);
+    setForm({
+      name: employee.name,
+      cpf: employee.cpf || '',
+      birthDate: employee.birthDate?.slice(0, 10) || '',
+      phone: employee.phone || '',
+      whatsapp: employee.whatsapp || '',
+      email: employee.email || '',
+      address: employee.address || '',
+      position: employee.position || '',
+      hiredAt: employee.hiredAt?.slice(0, 10) || '',
+      color: employee.color,
+      defaultCommission: String(employee.defaultCommission),
+      notes: employee.notes || '',
+    });
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   return (
     <div className="page employees-module">
@@ -115,7 +153,14 @@ export function Employees() {
         <div className="employee-head-actions">
           <span className="employee-total">{data?.total ?? 0} cadastrados</span>
           {can(Permissions.EMPLOYEES_CREATE) && (
-            <button className="primary" onClick={() => setShowForm(true)}>
+            <button
+              className="primary"
+              onClick={() => {
+                setEditingId(undefined);
+                setForm(emptyForm);
+                setShowForm(true);
+              }}
+            >
               <Plus /> Novo colaborador
             </button>
           )}
@@ -127,21 +172,18 @@ export function Employees() {
           className="card employee-form"
           onSubmit={(event) => {
             event.preventDefault();
-            create.mutate();
+            save.mutate();
           }}
         >
           <div className="employee-form-head">
             <div>
-              <h3>Novo colaborador</h3>
-              <p>Cadastre os dados profissionais e de contato.</p>
+              <h3>{editingId ? 'Editar colaborador' : 'Novo colaborador'}</h3>
+              <p>Informe os dados profissionais e de contato.</p>
             </div>
             <button
               type="button"
               className="icon"
-              onClick={() => {
-                setShowForm(false);
-                setForm(emptyForm);
-              }}
+              onClick={closeForm}
               title="Fechar formulário"
               aria-label="Fechar formulário"
             >
@@ -257,8 +299,8 @@ export function Employees() {
             </label>
           </div>
           <div className="employee-form-actions">
-            <button type="submit" className="primary" disabled={create.isPending}>
-              <Save /> {create.isPending ? 'Salvando...' : 'Salvar colaborador'}
+            <button type="submit" className="primary" disabled={save.isPending}>
+              <Save /> {save.isPending ? 'Salvando...' : 'Salvar colaborador'}
             </button>
           </div>
         </form>
@@ -313,6 +355,7 @@ export function Employees() {
                 <th>Comissão</th>
                 <th>Acesso</th>
                 <th>Status</th>
+                <th aria-label="Ações"></th>
               </tr>
             </thead>
             <tbody>
@@ -361,6 +404,18 @@ export function Employees() {
                     <span className={`employee-status ${employee.active ? 'active' : ''}`}>
                       {employee.active ? 'Ativo' : 'Inativo'}
                     </span>
+                  </td>
+                  <td>
+                    {can(Permissions.EMPLOYEES_UPDATE) && (
+                      <button
+                        className="icon"
+                        onClick={() => edit(employee)}
+                        title="Editar colaborador"
+                        aria-label={`Editar ${employee.name}`}
+                      >
+                        <Pencil />
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

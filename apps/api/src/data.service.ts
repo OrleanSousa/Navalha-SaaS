@@ -1,8 +1,13 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
-import { CreateEmployeeDto, EmployeeStatusFilter, ListEmployeesQuery } from './data.dto';
+import {
+  CreateEmployeeDto,
+  EmployeeStatusFilter,
+  ListEmployeesQuery,
+  UpdateEmployeeDto,
+} from './data.dto';
 
 @Injectable()
 export class DataService {
@@ -88,8 +93,8 @@ export class DataService {
         },
         select: { cpf: true, email: true },
       });
-      if (duplicate?.cpf === cpf) throw new ConflictException('CPF já cadastrado');
-      if (duplicate?.email === email) throw new ConflictException('E-mail já cadastrado');
+      if (cpf && duplicate?.cpf === cpf) throw new ConflictException('CPF já cadastrado');
+      if (email && duplicate?.email === email) throw new ConflictException('E-mail já cadastrado');
     }
 
     return this.db.employee.create({
@@ -107,6 +112,49 @@ export class DataService {
         color: dto.color,
         defaultCommission: dto.defaultCommission,
         notes: dto.notes?.trim() || null,
+      },
+    });
+  }
+
+  async updateEmployee(id: string, dto: UpdateEmployeeDto) {
+    const barbershopId = this.tenant.barbershopId;
+    const current = await this.db.employee.findFirst({
+      where: { id, barbershopId, deletedAt: null },
+    });
+    if (!current) throw new NotFoundException('Colaborador não encontrado');
+
+    const cpf = dto.cpf === undefined ? undefined : dto.cpf?.trim() || null;
+    const email = dto.email === undefined ? undefined : dto.email?.trim().toLowerCase() || null;
+    if (cpf || email) {
+      const duplicate = await this.db.employee.findFirst({
+        where: {
+          barbershopId,
+          deletedAt: null,
+          id: { not: id },
+          OR: [...(cpf ? [{ cpf }] : []), ...(email ? [{ email }] : [])],
+        },
+        select: { cpf: true, email: true },
+      });
+      if (cpf && duplicate?.cpf === cpf) throw new ConflictException('CPF já cadastrado');
+      if (email && duplicate?.email === email) throw new ConflictException('E-mail já cadastrado');
+    }
+
+    return this.db.employee.update({
+      where: { id },
+      data: {
+        name: dto.name?.trim(),
+        cpf,
+        birthDate:
+          dto.birthDate === undefined ? undefined : dto.birthDate ? new Date(dto.birthDate) : null,
+        phone: dto.phone === undefined ? undefined : dto.phone?.trim() || null,
+        whatsapp: dto.whatsapp === undefined ? undefined : dto.whatsapp?.trim() || null,
+        email,
+        address: dto.address === undefined ? undefined : dto.address?.trim() || null,
+        position: dto.position === undefined ? undefined : dto.position?.trim() || null,
+        hiredAt: dto.hiredAt === undefined ? undefined : dto.hiredAt ? new Date(dto.hiredAt) : null,
+        color: dto.color,
+        defaultCommission: dto.defaultCommission,
+        notes: dto.notes === undefined ? undefined : dto.notes?.trim() || null,
       },
     });
   }

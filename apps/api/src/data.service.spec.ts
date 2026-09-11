@@ -12,6 +12,7 @@ describe('DataService tenant isolation', () => {
         count: jest.fn().mockResolvedValue(0),
         findFirst: jest.fn().mockResolvedValue(null),
         create: jest.fn(),
+        update: jest.fn(),
       },
       service: { findMany: jest.fn().mockResolvedValue([]) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
@@ -123,6 +124,38 @@ describe('DataService tenant isolation', () => {
       }),
     ).rejects.toThrow('CPF já cadastrado');
     expect(db.employee.create).not.toHaveBeenCalled();
+  });
+
+  it('edita somente colaborador pertencente ao tenant', async () => {
+    db.employee.findFirst.mockResolvedValueOnce({ id: 'employee-1' }).mockResolvedValueOnce(null);
+    db.employee.update.mockResolvedValue({ id: 'employee-1', name: 'Maria Silva' });
+
+    await service.updateEmployee('employee-1', {
+      name: ' Maria Silva ',
+      email: 'MARIA@EXEMPLO.COM',
+      phone: null,
+    } as any);
+
+    expect(db.employee.findFirst).toHaveBeenNthCalledWith(1, {
+      where: { id: 'employee-1', barbershopId: 'shop-1', deletedAt: null },
+    });
+    expect(db.employee.update).toHaveBeenCalledWith({
+      where: { id: 'employee-1' },
+      data: expect.objectContaining({
+        name: 'Maria Silva',
+        email: 'maria@exemplo.com',
+        phone: null,
+      }),
+    });
+  });
+
+  it('não edita colaborador de outro tenant', async () => {
+    db.employee.findFirst.mockResolvedValue(null);
+
+    await expect(service.updateEmployee('employee-other', { name: 'Outro' })).rejects.toThrow(
+      'Colaborador não encontrado',
+    );
+    expect(db.employee.update).not.toHaveBeenCalled();
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {

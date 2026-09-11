@@ -1,4 +1,5 @@
 import { Type } from 'class-transformer';
+import { PartialType } from '@nestjs/swagger';
 import {
   IsDateString,
   IsEmail,
@@ -74,4 +75,12 @@ export class CreateEmployeeDto {
   defaultCommission = 0;
 
   @IsOptional() @IsString() @MaxLength(1000) notes?: string;
+}
+
+export class UpdateEmployeeDto extends PartialType(CreateEmployeeDto) {
+  constructor() {
+    super();
+    this.color = undefined;
+    this.defaultCommission = undefined;
+  }
 }
