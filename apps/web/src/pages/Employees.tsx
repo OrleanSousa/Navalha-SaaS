@@ -1,7 +1,20 @@
-import { useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Mail, Phone, Search, UserRound } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ChevronLeft,
+  ChevronRight,
+  Mail,
+  Phone,
+  Plus,
+  Save,
+  Search,
+  UserRound,
+  X,
+} from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import { api } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { Permissions } from '../lib/permissions';
 
 type Employee = {
   id: string;
@@ -27,11 +40,30 @@ type EmployeePage = {
   positions: string[];
 };
 
+const emptyForm = {
+  name: '',
+  cpf: '',
+  birthDate: '',
+  phone: '',
+  whatsapp: '',
+  email: '',
+  address: '',
+  position: '',
+  hiredAt: '',
+  color: '#4F7CAC',
+  defaultCommission: '0',
+  notes: '',
+};
+
 export function Employees() {
+  const { can } = useAuth();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState('ALL');
   const [position, setPosition] = useState('');
   const [page, setPage] = useState(1);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState(emptyForm);
 
   useEffect(() => setPage(1), [search, status, position]);
 
@@ -52,6 +84,27 @@ export function Employees() {
     placeholderData: (previous) => previous,
   });
 
+  const create = useMutation({
+    mutationFn: () =>
+      api.post('/employees', {
+        ...Object.fromEntries(
+          Object.entries(form).filter(
+            ([key, value]) => key === 'color' || key === 'defaultCommission' || value,
+          ),
+        ),
+        defaultCommission: Number(form.defaultCommission),
+      }),
+    onSuccess: async () => {
+      toast.success('Colaborador cadastrado');
+      setForm(emptyForm);
+      setShowForm(false);
+      setPage(1);
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível cadastrar o colaborador'),
+  });
+
   return (
     <div className="page employees-module">
       <div className="module-head">
@@ -59,8 +112,157 @@ export function Employees() {
           <h2>Colaboradores</h2>
           <p>Consulte a equipe, os contatos e os acessos ao sistema.</p>
         </div>
-        <span className="employee-total">{data?.total ?? 0} cadastrados</span>
+        <div className="employee-head-actions">
+          <span className="employee-total">{data?.total ?? 0} cadastrados</span>
+          {can(Permissions.EMPLOYEES_CREATE) && (
+            <button className="primary" onClick={() => setShowForm(true)}>
+              <Plus /> Novo colaborador
+            </button>
+          )}
+        </div>
       </div>
+
+      {showForm && (
+        <form
+          className="card employee-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            create.mutate();
+          }}
+        >
+          <div className="employee-form-head">
+            <div>
+              <h3>Novo colaborador</h3>
+              <p>Cadastre os dados profissionais e de contato.</p>
+            </div>
+            <button
+              type="button"
+              className="icon"
+              onClick={() => {
+                setShowForm(false);
+                setForm(emptyForm);
+              }}
+              title="Fechar formulário"
+              aria-label="Fechar formulário"
+            >
+              <X />
+            </button>
+          </div>
+          <div className="employee-form-grid">
+            <label>
+              Nome completo
+              <input
+                value={form.name}
+                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                minLength={2}
+                maxLength={120}
+                required
+              />
+            </label>
+            <label>
+              Cargo
+              <input
+                value={form.position}
+                onChange={(event) => setForm({ ...form, position: event.target.value })}
+                maxLength={80}
+              />
+            </label>
+            <label>
+              CPF
+              <input
+                value={form.cpf}
+                onChange={(event) => setForm({ ...form, cpf: event.target.value })}
+                maxLength={20}
+              />
+            </label>
+            <label>
+              Data de nascimento
+              <input
+                type="date"
+                value={form.birthDate}
+                onChange={(event) => setForm({ ...form, birthDate: event.target.value })}
+              />
+            </label>
+            <label>
+              Telefone
+              <input
+                value={form.phone}
+                onChange={(event) => setForm({ ...form, phone: event.target.value })}
+                maxLength={30}
+              />
+            </label>
+            <label>
+              WhatsApp
+              <input
+                value={form.whatsapp}
+                onChange={(event) => setForm({ ...form, whatsapp: event.target.value })}
+                maxLength={30}
+              />
+            </label>
+            <label>
+              E-mail
+              <input
+                type="email"
+                value={form.email}
+                onChange={(event) => setForm({ ...form, email: event.target.value })}
+                maxLength={160}
+              />
+            </label>
+            <label>
+              Data de contratação
+              <input
+                type="date"
+                value={form.hiredAt}
+                onChange={(event) => setForm({ ...form, hiredAt: event.target.value })}
+              />
+            </label>
+            <label>
+              Comissão padrão (%)
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.01"
+                value={form.defaultCommission}
+                onChange={(event) => setForm({ ...form, defaultCommission: event.target.value })}
+                required
+              />
+            </label>
+            <label>
+              Cor na agenda
+              <span className="employee-color-input">
+                <input
+                  type="color"
+                  value={form.color}
+                  onChange={(event) => setForm({ ...form, color: event.target.value })}
+                />
+                {form.color.toUpperCase()}
+              </span>
+            </label>
+            <label className="wide">
+              Endereço
+              <input
+                value={form.address}
+                onChange={(event) => setForm({ ...form, address: event.target.value })}
+                maxLength={240}
+              />
+            </label>
+            <label className="wide">
+              Observações
+              <textarea
+                value={form.notes}
+                onChange={(event) => setForm({ ...form, notes: event.target.value })}
+                maxLength={1000}
+              />
+            </label>
+          </div>
+          <div className="employee-form-actions">
+            <button type="submit" className="primary" disabled={create.isPending}>
+              <Save /> {create.isPending ? 'Salvando...' : 'Salvar colaborador'}
+            </button>
+          </div>
+        </form>
+      )}
 
       <div className="employee-filters">
         <label className="search">

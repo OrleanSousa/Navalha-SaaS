@@ -10,6 +10,8 @@ describe('DataService tenant isolation', () => {
       employee: {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
+        findFirst: jest.fn().mockResolvedValue(null),
+        create: jest.fn(),
       },
       service: { findMany: jest.fn().mockResolvedValue([]) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
@@ -84,6 +86,43 @@ describe('DataService tenant isolation', () => {
       expect.objectContaining({ items: [{ id: 'employee-1', name: 'Ana' }], total: 1, pages: 1 }),
     );
     expect(result.positions).toEqual(['Barbeiro']);
+  });
+
+  it('cadastra colaborador no tenant autenticado', async () => {
+    db.employee.create.mockResolvedValue({ id: 'employee-2', name: 'Maria' });
+
+    await service.createEmployee({
+      name: ' Maria ',
+      email: 'MARIA@EXEMPLO.COM',
+      color: '#527CA0',
+      defaultCommission: 40,
+    });
+
+    expect(db.employee.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: expect.objectContaining({ barbershopId: 'shop-1' }) }),
+    );
+    expect(db.employee.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        barbershopId: 'shop-1',
+        name: 'Maria',
+        email: 'maria@exemplo.com',
+        defaultCommission: 40,
+      }),
+    });
+  });
+
+  it('impede CPF duplicado no mesmo tenant', async () => {
+    db.employee.findFirst.mockResolvedValue({ cpf: '12345678900', email: null });
+
+    await expect(
+      service.createEmployee({
+        name: 'Maria',
+        cpf: '12345678900',
+        color: '#527CA0',
+        defaultCommission: 0,
+      }),
+    ).rejects.toThrow('CPF já cadastrado');
+    expect(db.employee.create).not.toHaveBeenCalled();
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {

@@ -1,8 +1,8 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
-import { EmployeeStatusFilter, ListEmployeesQuery } from './data.dto';
+import { CreateEmployeeDto, EmployeeStatusFilter, ListEmployeesQuery } from './data.dto';
 
 @Injectable()
 export class DataService {
@@ -72,6 +72,43 @@ export class DataService {
       pages: Math.ceil(total / limit),
       positions: positionRows.map(({ position }) => position).filter(Boolean),
     };
+  }
+
+  async createEmployee(dto: CreateEmployeeDto) {
+    const barbershopId = this.tenant.barbershopId;
+    const cpf = dto.cpf?.trim() || null;
+    const email = dto.email?.trim().toLowerCase() || null;
+
+    if (cpf || email) {
+      const duplicate = await this.db.employee.findFirst({
+        where: {
+          barbershopId,
+          deletedAt: null,
+          OR: [...(cpf ? [{ cpf }] : []), ...(email ? [{ email }] : [])],
+        },
+        select: { cpf: true, email: true },
+      });
+      if (duplicate?.cpf === cpf) throw new ConflictException('CPF já cadastrado');
+      if (duplicate?.email === email) throw new ConflictException('E-mail já cadastrado');
+    }
+
+    return this.db.employee.create({
+      data: {
+        barbershopId,
+        name: dto.name.trim(),
+        cpf,
+        birthDate: dto.birthDate ? new Date(dto.birthDate) : null,
+        phone: dto.phone?.trim() || null,
+        whatsapp: dto.whatsapp?.trim() || null,
+        email,
+        address: dto.address?.trim() || null,
+        position: dto.position?.trim() || null,
+        hiredAt: dto.hiredAt ? new Date(dto.hiredAt) : null,
+        color: dto.color,
+        defaultCommission: dto.defaultCommission,
+        notes: dto.notes?.trim() || null,
+      },
+    });
   }
 
   services() {
