@@ -120,11 +120,22 @@ export class AuthService {
     }
   }
   async createSession(user: any, request: Request) {
-    const rolePermissions = await this.db.rolePermission.findMany({
-      where: { role: user.role as Role },
-      select: { permission: { select: { key: true } } },
-    });
-    const permissions = rolePermissions.map(({ permission }: any) => permission.key);
+    const [rolePermissions, userPermissions] = await Promise.all([
+      this.db.rolePermission.findMany({
+        where: { role: user.role as Role },
+        select: { permission: { select: { key: true } } },
+      }),
+      this.db.userPermission.findMany({
+        where: { userId: user.id },
+        select: { granted: true, permission: { select: { key: true } } },
+      }),
+    ]);
+    const effective = new Set(rolePermissions.map(({ permission }: any) => permission.key));
+    for (const override of userPermissions) {
+      if (override.granted) effective.add(override.permission.key);
+      else effective.delete(override.permission.key);
+    }
+    const permissions = [...effective];
     const refreshToken = randomBytes(48).toString('base64url');
     const expiresAt = new Date(Date.now() + REFRESH_DAYS * 86400000);
     await this.db.session.create({

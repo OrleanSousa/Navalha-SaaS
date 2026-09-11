@@ -21,6 +21,7 @@ import {
   CreateEmployeeAccessDto,
   ListEmployeesQuery,
   SetEmployeeStatusDto,
+  UpdateEmployeeAccessDto,
   UpdateEmployeeDto,
 } from './data.dto';
 import { Permissions, PermissionsGuard, RequirePermissions, Roles, RolesGuard } from './rbac';
@@ -85,6 +86,18 @@ export class DataController {
   @RequirePermissions(Permissions.EMPLOYEES_ACCESS)
   createEmployeeAccess(@Param('id') id: string, @Body() dto: CreateEmployeeAccessDto) {
     return this.data.createEmployeeAccess(id, dto);
+  }
+
+  @Get('employees/:id/access')
+  @RequirePermissions(Permissions.EMPLOYEES_PERMISSIONS)
+  employeeAccess(@Param('id') id: string) {
+    return this.data.employeeAccess(id);
+  }
+
+  @Patch('employees/:id/access')
+  @RequirePermissions(Permissions.EMPLOYEES_PERMISSIONS)
+  updateEmployeeAccess(@Param('id') id: string, @Body() dto: UpdateEmployeeAccessDto) {
+    return this.data.updateEmployeeAccess(id, dto);
   }
 
   @Get('services')

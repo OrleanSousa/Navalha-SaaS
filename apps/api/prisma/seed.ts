@@ -10,6 +10,7 @@ const permissionCatalog = [
   ['employees.status', 'Ativar e inativar colaboradores'],
   ['employees.photo', 'Alterar foto de colaboradores'],
   ['employees.access', 'Criar acesso de colaboradores'],
+  ['employees.permissions', 'Editar perfil e permissões'],
   ['services.read', 'Visualizar serviços'],
   ['products.read', 'Visualizar produtos'],
   ['appointments.read', 'Visualizar agenda'],

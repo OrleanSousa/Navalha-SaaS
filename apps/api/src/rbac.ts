@@ -20,6 +20,7 @@ export const Permissions = {
   EMPLOYEES_STATUS: 'employees.status',
   EMPLOYEES_PHOTO: 'employees.photo',
   EMPLOYEES_ACCESS: 'employees.access',
+  EMPLOYEES_PERMISSIONS: 'employees.permissions',
   SERVICES_READ: 'services.read',
   PRODUCTS_READ: 'products.read',
   APPOINTMENTS_READ: 'appointments.read',
@@ -43,6 +44,7 @@ export const PERMISSION_CATALOG: ReadonlyArray<{
   { key: Permissions.EMPLOYEES_STATUS, description: 'Ativar e inativar colaboradores' },
   { key: Permissions.EMPLOYEES_PHOTO, description: 'Alterar foto de colaboradores' },
   { key: Permissions.EMPLOYEES_ACCESS, description: 'Criar acesso de colaboradores' },
+  { key: Permissions.EMPLOYEES_PERMISSIONS, description: 'Editar perfil e permissões' },
   { key: Permissions.SERVICES_READ, description: 'Visualizar serviços' },
   { key: Permissions.PRODUCTS_READ, description: 'Visualizar produtos' },
   { key: Permissions.APPOINTMENTS_READ, description: 'Visualizar agenda' },
@@ -136,13 +138,22 @@ export class PermissionsGuard implements CanActivate {
       return true;
     }
 
-    const granted = await this.db.rolePermission.count({
-      where: {
-        role: request.user.role as Role,
-        permission: { key: { in: permissions } },
-      },
-    });
-    if (granted !== permissions.length) {
+    const [rolePermissions, overrides] = await Promise.all([
+      this.db.rolePermission.findMany({
+        where: { role: request.user.role as Role, permission: { key: { in: permissions } } },
+        select: { permission: { select: { key: true } } },
+      }),
+      this.db.userPermission.findMany({
+        where: { userId: request.user.sub, permission: { key: { in: permissions } } },
+        select: { granted: true, permission: { select: { key: true } } },
+      }),
+    ]);
+    const effective = new Set(rolePermissions.map(({ permission }) => permission.key));
+    for (const override of overrides) {
+      if (override.granted) effective.add(override.permission.key);
+      else effective.delete(override.permission.key);
+    }
+    if (permissions.some((permission) => !effective.has(permission))) {
       throw new ForbiddenException('Permissão insuficiente para este recurso');
     }
     return true;

@@ -12,6 +12,7 @@ import {
   PowerOff,
   Save,
   Search,
+  ShieldCheck,
   UserRound,
   X,
 } from 'lucide-react';
@@ -50,6 +51,17 @@ type EmployeePage = {
   positions: string[];
 };
 
+type AccessSettings = {
+  employee: { id: string; name: string };
+  user: { id: string; email: string; role: string; active: boolean };
+  permissions: Array<{
+    key: string;
+    description: string;
+    inherited: boolean;
+    granted: boolean;
+  }>;
+};
+
 const emptyForm = {
   name: '',
   cpf: '',
@@ -81,6 +93,9 @@ export function Employees() {
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState('');
   const [accessEmployee, setAccessEmployee] = useState<Employee>();
   const [accessForm, setAccessForm] = useState(emptyAccessForm);
+  const [permissionEmployee, setPermissionEmployee] = useState<Employee>();
+  const [accessEdit, setAccessEdit] = useState({ email: '', role: 'BARBER', active: true });
+  const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
   const [form, setForm] = useState(emptyForm);
 
   const photoPreview = useMemo(
@@ -113,6 +128,24 @@ export function Employees() {
       ).data,
     placeholderData: (previous) => previous,
   });
+
+  const { data: accessSettings, isLoading: accessLoading } = useQuery<AccessSettings>({
+    queryKey: ['employee-access', permissionEmployee?.id],
+    queryFn: async () => (await api.get(`/employees/${permissionEmployee?.id}/access`)).data,
+    enabled: Boolean(permissionEmployee),
+  });
+
+  useEffect(() => {
+    if (!accessSettings) return;
+    setAccessEdit({
+      email: accessSettings.user.email,
+      role: accessSettings.user.role,
+      active: accessSettings.user.active,
+    });
+    setSelectedPermissions(
+      accessSettings.permissions.filter((permission) => permission.granted).map(({ key }) => key),
+    );
+  }, [accessSettings]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -182,6 +215,22 @@ export function Employees() {
       toast.error(error.response?.data?.message || 'Não foi possível criar o acesso'),
   });
 
+  const updateAccess = useMutation({
+    mutationFn: () =>
+      api.patch(`/employees/${permissionEmployee?.id}/access`, {
+        ...accessEdit,
+        permissions: selectedPermissions,
+      }),
+    onSuccess: async () => {
+      toast.success('Perfil e permissões atualizados');
+      setPermissionEmployee(undefined);
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+      await queryClient.invalidateQueries({ queryKey: ['employee-access'] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível atualizar o acesso'),
+  });
+
   function closeForm() {
     setShowForm(false);
     setEditingId(undefined);
@@ -233,9 +282,23 @@ export function Employees() {
 
   function openAccess(employee: Employee) {
     closeForm();
+    setPermissionEmployee(undefined);
     setAccessEmployee(employee);
     setAccessForm({ email: employee.email || '', password: '', role: 'BARBER' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function openPermissions(employee: Employee) {
+    closeForm();
+    setAccessEmployee(undefined);
+    setPermissionEmployee(employee);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function togglePermission(key: string) {
+    setSelectedPermissions((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    );
   }
 
   return (
@@ -263,6 +326,91 @@ export function Employees() {
           )}
         </div>
       </div>
+
+      {permissionEmployee && (
+        <form
+          className="card permission-editor"
+          onSubmit={(event) => {
+            event.preventDefault();
+            updateAccess.mutate();
+          }}
+        >
+          <div className="permission-editor-head">
+            <div>
+              <h3>Acesso de {permissionEmployee.name}</h3>
+              <p>Defina o perfil e ajuste as permissões efetivas.</p>
+            </div>
+            <button
+              type="button"
+              className="icon"
+              onClick={() => setPermissionEmployee(undefined)}
+              title="Fechar editor"
+              aria-label="Fechar editor"
+            >
+              <X />
+            </button>
+          </div>
+          {accessLoading || !accessSettings ? (
+            <div className="empty">Carregando permissões...</div>
+          ) : (
+            <>
+              <div className="permission-profile-fields">
+                <label>
+                  E-mail
+                  <input
+                    type="email"
+                    value={accessEdit.email}
+                    onChange={(event) =>
+                      setAccessEdit({ ...accessEdit, email: event.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  Perfil
+                  <select
+                    value={accessEdit.role}
+                    onChange={(event) => setAccessEdit({ ...accessEdit, role: event.target.value })}
+                  >
+                    <option value="BARBER">Barbeiro</option>
+                    <option value="RECEPTIONIST">Recepcionista</option>
+                  </select>
+                </label>
+                <label className="permission-active-toggle">
+                  <input
+                    type="checkbox"
+                    checked={accessEdit.active}
+                    onChange={(event) =>
+                      setAccessEdit({ ...accessEdit, active: event.target.checked })
+                    }
+                  />
+                  <span /> Usuário ativo
+                </label>
+              </div>
+              <div className="permission-grid">
+                {accessSettings.permissions.map((permission) => (
+                  <label key={permission.key}>
+                    <input
+                      type="checkbox"
+                      checked={selectedPermissions.includes(permission.key)}
+                      onChange={() => togglePermission(permission.key)}
+                    />
+                    <span>
+                      <b>{permission.description}</b>
+                      <small>{permission.inherited ? 'Herdada do perfil' : permission.key}</small>
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <div className="employee-form-actions">
+                <button type="submit" className="primary" disabled={updateAccess.isPending}>
+                  <Save /> {updateAccess.isPending ? 'Salvando...' : 'Salvar acesso'}
+                </button>
+              </div>
+            </>
+          )}
+        </form>
+      )}
 
       {accessEmployee && (
         <form
@@ -604,6 +752,16 @@ export function Employees() {
                           aria-label={`Criar acesso para ${employee.name}`}
                         >
                           <KeyRound />
+                        </button>
+                      )}
+                      {can(Permissions.EMPLOYEES_PERMISSIONS) && employee.user && (
+                        <button
+                          className="icon permission-action"
+                          onClick={() => openPermissions(employee)}
+                          title="Editar perfil e permissões"
+                          aria-label={`Editar permissões de ${employee.name}`}
+                        >
+                          <ShieldCheck />
                         </button>
                       )}
                     </div>

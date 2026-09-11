@@ -9,12 +9,14 @@ import {
   IsInt,
   IsNumber,
   IsOptional,
+  IsArray,
   IsString,
   Matches,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ArrayUnique,
 } from 'class-validator';
 
 export enum EmployeeStatusFilter {
@@ -104,4 +106,19 @@ export class CreateEmployeeAccessDto {
 
   @IsEnum(Role)
   role: Role;
+}
+
+export class UpdateEmployeeAccessDto {
+  @IsEmail() @MaxLength(160) email: string;
+
+  @IsEnum(Role)
+  role: Role;
+
+  @IsBoolean()
+  active: boolean;
+
+  @IsArray()
+  @ArrayUnique()
+  @IsString({ each: true })
+  permissions: string[];
 }

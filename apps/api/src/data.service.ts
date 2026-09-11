@@ -17,6 +17,7 @@ import {
   EmployeeStatusFilter,
   ListEmployeesQuery,
   UpdateEmployeeDto,
+  UpdateEmployeeAccessDto,
 } from './data.dto';
 
 @Injectable()
@@ -289,6 +290,104 @@ export class DataService {
       },
       include: { user: { select: { id: true, email: true, role: true, active: true } } },
     });
+  }
+
+  async employeeAccess(id: string) {
+    const employee = await this.db.employee.findFirst({
+      where: { id, barbershopId: this.tenant.barbershopId, deletedAt: null },
+      select: {
+        id: true,
+        name: true,
+        user: { select: { id: true, email: true, role: true, active: true } },
+      },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+    if (!employee.user) throw new ConflictException('Colaborador ainda não possui acesso');
+
+    const [catalog, rolePermissions, overrides] = await Promise.all([
+      this.db.permission.findMany({ orderBy: { description: 'asc' } }),
+      this.db.rolePermission.findMany({
+        where: { role: employee.user.role },
+        select: { permissionId: true },
+      }),
+      this.db.userPermission.findMany({
+        where: { userId: employee.user.id },
+        select: { permissionId: true, granted: true },
+      }),
+    ]);
+    const roleKeys = new Set(rolePermissions.map(({ permissionId }) => permissionId));
+    const overrideById = new Map(overrides.map((item) => [item.permissionId, item.granted]));
+
+    return {
+      employee: { id: employee.id, name: employee.name },
+      user: employee.user,
+      permissions: catalog.map((permission) => ({
+        key: permission.key,
+        description: permission.description,
+        inherited: roleKeys.has(permission.id),
+        granted: overrideById.get(permission.id) ?? roleKeys.has(permission.id),
+      })),
+    };
+  }
+
+  async updateEmployeeAccess(id: string, dto: UpdateEmployeeAccessDto) {
+    const barbershopId = this.tenant.barbershopId;
+    const employee = await this.db.employee.findFirst({
+      where: { id, barbershopId, deletedAt: null },
+      select: { id: true, user: { select: { id: true, email: true } } },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+    if (!employee.user) throw new ConflictException('Colaborador ainda não possui acesso');
+    if (dto.role !== Role.BARBER && dto.role !== Role.RECEPTIONIST) {
+      throw new BadRequestException('Perfil inválido para colaborador');
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    const emailOwner = await this.db.user.findUnique({ where: { email }, select: { id: true } });
+    if (emailOwner && emailOwner.id !== employee.user.id) {
+      throw new ConflictException('E-mail já utilizado por outro usuário');
+    }
+
+    const uniqueKeys = [...new Set(dto.permissions)];
+    const [catalog, rolePermissions] = await Promise.all([
+      this.db.permission.findMany({
+        where: { key: { in: uniqueKeys } },
+        select: { id: true, key: true },
+      }),
+      this.db.rolePermission.findMany({
+        where: { role: dto.role },
+        select: { permissionId: true },
+      }),
+    ]);
+    if (catalog.length !== uniqueKeys.length) {
+      throw new BadRequestException('A lista contém permissão inválida');
+    }
+
+    const selected = new Set(uniqueKeys);
+    const rolePermissionIds = new Set(rolePermissions.map(({ permissionId }) => permissionId));
+    const allPermissions = await this.db.permission.findMany({ select: { id: true, key: true } });
+    const overrides = allPermissions
+      .filter((permission) => selected.has(permission.key) !== rolePermissionIds.has(permission.id))
+      .map((permission) => ({
+        userId: employee.user!.id,
+        permissionId: permission.id,
+        granted: selected.has(permission.key),
+      }));
+
+    await this.db.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: employee.user!.id },
+        data: { email, role: dto.role, active: dto.active },
+      });
+      await tx.userPermission.deleteMany({ where: { userId: employee.user!.id } });
+      if (overrides.length) await tx.userPermission.createMany({ data: overrides });
+      await tx.session.updateMany({
+        where: { userId: employee.user!.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    });
+
+    return this.employeeAccess(id);
   }
 
   services() {

@@ -23,6 +23,7 @@ describe('AuthService login', () => {
       auditLog: { create: jest.fn().mockResolvedValue({}) },
       session: { create: jest.fn().mockResolvedValue({}) },
       rolePermission: { findMany: jest.fn().mockResolvedValue([]) },
+      userPermission: { findMany: jest.fn().mockResolvedValue([]) },
     };
     jwt = { signAsync: jest.fn().mockResolvedValue('access-token') };
     service = new AuthService(db, jwt);
@@ -60,6 +61,25 @@ describe('AuthService login', () => {
       expect.objectContaining({ where: { email: 'admin@example.com' } }),
     );
     expect(db.session.create).toHaveBeenCalledTimes(1);
+  });
+
+  it('aplica concessões e bloqueios individuais na sessão', async () => {
+    db.user.findUnique.mockResolvedValue(user());
+    db.rolePermission.findMany.mockResolvedValue([
+      { permission: { key: 'dashboard.read' } },
+      { permission: { key: 'customers.read' } },
+    ]);
+    db.userPermission.findMany.mockResolvedValue([
+      { granted: false, permission: { key: 'customers.read' } },
+      { granted: true, permission: { key: 'employees.read' } },
+    ]);
+
+    const result = await service.login(
+      { email: 'admin@example.com', password: 'Valid@123' },
+      request,
+    );
+
+    expect(result.user.permissions).toEqual(['dashboard.read', 'employees.read']);
   });
 
   it('rejeita senha incorreta', async () => {

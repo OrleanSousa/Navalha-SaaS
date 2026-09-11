@@ -355,6 +355,7 @@ model User {
   auditLogs           AuditLog[]
   sessions            Session[]
   passwordResetTokens PasswordResetToken[]
+  userPermissions     UserPermission[]
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
 
@@ -366,8 +367,22 @@ model Permission {
   key             String           @unique
   description     String
   rolePermissions RolePermission[]
+  userPermissions UserPermission[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
+}
+
+model UserPermission {
+  userId       String
+  permissionId String
+  granted      Boolean
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@id([userId, permissionId])
+  @@index([permissionId])
 }
 
 model RolePermission {

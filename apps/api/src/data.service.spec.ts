@@ -25,7 +25,16 @@ describe('DataService tenant isolation', () => {
       user: {
         findUnique: jest.fn().mockResolvedValue(null),
         count: jest.fn().mockResolvedValue(0),
+        update: jest.fn().mockResolvedValue({}),
       },
+      permission: { findMany: jest.fn().mockResolvedValue([]) },
+      rolePermission: { findMany: jest.fn().mockResolvedValue([]) },
+      userPermission: {
+        findMany: jest.fn().mockResolvedValue([]),
+        deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+        createMany: jest.fn().mockResolvedValue({ count: 0 }),
+      },
+      session: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
       subscription: {
         findUnique: jest.fn().mockResolvedValue({ plan: { maxUsers: 0 } }),
       },
@@ -40,6 +49,7 @@ describe('DataService tenant isolation', () => {
       },
       cashRegister: { findFirst: jest.fn().mockResolvedValue(null) },
     };
+    db.$transaction = jest.fn((callback) => callback(db));
     service = new DataService(db, { barbershopId: 'shop-1' } as any);
   });
 
@@ -307,6 +317,61 @@ describe('DataService tenant isolation', () => {
       } as any),
     ).rejects.toThrow('Limite de usuários do plano atingido');
     expect(db.employee.update).not.toHaveBeenCalled();
+  });
+
+  it('retorna permissões efetivas do acesso do colaborador', async () => {
+    db.employee.findFirst.mockResolvedValue({
+      id: 'employee-1',
+      name: 'Maria',
+      user: { id: 'user-1', email: 'maria@example.com', role: 'BARBER', active: true },
+    });
+    db.permission.findMany.mockResolvedValue([
+      { id: 'p1', key: 'dashboard.read', description: 'Dashboard' },
+      { id: 'p2', key: 'customers.read', description: 'Clientes' },
+    ]);
+    db.rolePermission.findMany.mockResolvedValue([{ permissionId: 'p1' }]);
+    db.userPermission.findMany.mockResolvedValue([{ permissionId: 'p2', granted: true }]);
+
+    const result = await service.employeeAccess('employee-1');
+
+    expect(result.permissions).toEqual([
+      expect.objectContaining({ key: 'dashboard.read', inherited: true, granted: true }),
+      expect.objectContaining({ key: 'customers.read', inherited: false, granted: true }),
+    ]);
+  });
+
+  it('salva somente diferenças entre perfil e permissões individuais', async () => {
+    db.employee.findFirst.mockResolvedValue({
+      id: 'employee-1',
+      user: { id: 'user-1', email: 'maria@example.com' },
+    });
+    db.user.findUnique.mockResolvedValue({ id: 'user-1' });
+    db.permission.findMany
+      .mockResolvedValueOnce([{ id: 'p2', key: 'customers.read' }])
+      .mockResolvedValueOnce([
+        { id: 'p1', key: 'dashboard.read' },
+        { id: 'p2', key: 'customers.read' },
+      ]);
+    db.rolePermission.findMany.mockResolvedValue([{ permissionId: 'p1' }]);
+    jest.spyOn(service, 'employeeAccess').mockResolvedValue({ updated: true } as any);
+
+    await service.updateEmployeeAccess('employee-1', {
+      email: 'maria@example.com',
+      role: 'BARBER',
+      active: true,
+      permissions: ['customers.read'],
+    } as any);
+
+    expect(db.userPermission.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        { userId: 'user-1', permissionId: 'p1', granted: false },
+        { userId: 'user-1', permissionId: 'p2', granted: true },
+      ]),
+    });
+    expect(db.session.updateMany).toHaveBeenCalledWith({
+      where: { userId: 'user-1', revokedAt: null },
+      data: { revokedAt: expect.any(Date) },
+    });
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {
