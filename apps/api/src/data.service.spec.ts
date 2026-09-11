@@ -22,6 +22,13 @@ describe('DataService tenant isolation', () => {
         create: jest.fn(),
         update: jest.fn(),
       },
+      user: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        count: jest.fn().mockResolvedValue(0),
+      },
+      subscription: {
+        findUnique: jest.fn().mockResolvedValue({ plan: { maxUsers: 0 } }),
+      },
       service: { findMany: jest.fn().mockResolvedValue([]) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       appointment: {
@@ -241,6 +248,65 @@ describe('DataService tenant isolation', () => {
       } as Express.Multer.File),
     ).rejects.toThrow('Conteúdo da imagem inválido');
     expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('cria acesso vinculado a colaborador ativo do tenant', async () => {
+    db.employee.findFirst.mockResolvedValue({
+      id: 'employee-1',
+      name: 'Maria',
+      active: true,
+      userId: null,
+    });
+    db.employee.update.mockResolvedValue({
+      id: 'employee-1',
+      user: { id: 'user-1', email: 'maria@example.com', role: 'BARBER', active: true },
+    });
+
+    await service.createEmployeeAccess('employee-1', {
+      email: 'MARIA@EXAMPLE.COM',
+      password: 'Senha@123',
+      role: 'BARBER',
+    } as any);
+
+    expect(db.employee.findFirst).toHaveBeenCalledWith({
+      where: { id: 'employee-1', barbershopId: 'shop-1', deletedAt: null },
+      select: { id: true, name: true, active: true, userId: true },
+    });
+    expect(db.employee.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'employee-1' },
+        data: {
+          user: {
+            create: expect.objectContaining({
+              barbershopId: 'shop-1',
+              email: 'maria@example.com',
+              role: 'BARBER',
+              passwordHash: expect.not.stringMatching(/^Senha@123$/),
+            }),
+          },
+        },
+      }),
+    );
+  });
+
+  it('respeita o limite de usuários do plano', async () => {
+    db.employee.findFirst.mockResolvedValue({
+      id: 'employee-1',
+      name: 'Maria',
+      active: true,
+      userId: null,
+    });
+    db.subscription.findUnique.mockResolvedValue({ plan: { maxUsers: 2 } });
+    db.user.count.mockResolvedValue(2);
+
+    await expect(
+      service.createEmployeeAccess('employee-1', {
+        email: 'maria@example.com',
+        password: 'Senha@123',
+        role: 'BARBER',
+      } as any),
+    ).rejects.toThrow('Limite de usuários do plano atingido');
+    expect(db.employee.update).not.toHaveBeenCalled();
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {

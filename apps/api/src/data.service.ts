@@ -4,14 +4,16 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, Role } from '@prisma/client';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { basename, join } from 'node:path';
+import * as bcrypt from 'bcrypt';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
 import {
   CreateEmployeeDto,
+  CreateEmployeeAccessDto,
   EmployeeStatusFilter,
   ListEmployeesQuery,
   UpdateEmployeeDto,
@@ -238,6 +240,55 @@ export class DataService {
       await unlink(join(directory, basename(employee.photoUrl))).catch(() => undefined);
     }
     return updated;
+  }
+
+  async createEmployeeAccess(id: string, dto: CreateEmployeeAccessDto) {
+    const barbershopId = this.tenant.barbershopId;
+    const employee = await this.db.employee.findFirst({
+      where: { id, barbershopId, deletedAt: null },
+      select: { id: true, name: true, active: true, userId: true },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+    if (!employee.active)
+      throw new ConflictException('Reative o colaborador antes de criar acesso');
+    if (employee.userId) throw new ConflictException('Colaborador já possui acesso ao sistema');
+    if (dto.role !== Role.BARBER && dto.role !== Role.RECEPTIONIST) {
+      throw new BadRequestException('Perfil inválido para colaborador');
+    }
+
+    const email = dto.email.trim().toLowerCase();
+    if (await this.db.user.findUnique({ where: { email }, select: { id: true } })) {
+      throw new ConflictException('E-mail já utilizado por outro usuário');
+    }
+
+    const subscription = await this.db.subscription.findUnique({
+      where: { barbershopId },
+      select: { plan: { select: { maxUsers: true } } },
+    });
+    if (!subscription) throw new ConflictException('Assinatura sem plano configurado');
+    if (subscription.plan.maxUsers > 0) {
+      const users = await this.db.user.count({ where: { barbershopId } });
+      if (users >= subscription.plan.maxUsers) {
+        throw new ConflictException('Limite de usuários do plano atingido');
+      }
+    }
+
+    const passwordHash = await bcrypt.hash(dto.password, 12);
+    return this.db.employee.update({
+      where: { id: employee.id },
+      data: {
+        user: {
+          create: {
+            barbershopId,
+            name: employee.name,
+            email,
+            passwordHash,
+            role: dto.role,
+          },
+        },
+      },
+      include: { user: { select: { id: true, email: true, role: true, active: true } } },
+    });
   }
 
   services() {

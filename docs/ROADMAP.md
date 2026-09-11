@@ -115,7 +115,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 4.3 Editar colaborador
 - [x] 4.4 Inativar e reativar colaborador
 - [x] 4.5 Implementar upload/armazenamento de foto
-- [ ] 4.6 Criar acesso ao sistema associado ao colaborador
+- [x] 4.6 Criar acesso ao sistema associado ao colaborador
 - [ ] 4.7 Editar perfil e permissões individuais
 - [ ] 4.8 Configurar comissão padrão
 - [ ] 4.9 Criar tela de detalhes do colaborador
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Continuar a **Etapa 4** pela criação de acesso ao sistema associado ao colaborador (item 4.6). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 4** pela edição de perfil e permissões individuais (item 4.7). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

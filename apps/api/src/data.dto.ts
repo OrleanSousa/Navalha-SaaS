@@ -1,5 +1,6 @@
 import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
+import { Role } from '@prisma/client';
 import {
   IsDateString,
   IsBoolean,
@@ -89,4 +90,18 @@ export class UpdateEmployeeDto extends PartialType(CreateEmployeeDto) {
 export class SetEmployeeStatusDto {
   @IsBoolean()
   active: boolean;
+}
+
+export class CreateEmployeeAccessDto {
+  @IsEmail() @MaxLength(160) email: string;
+
+  @IsString()
+  @MinLength(8)
+  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/, {
+    message: 'A senha deve conter maiúscula, minúscula, número e símbolo',
+  })
+  password: string;
+
+  @IsEnum(Role)
+  role: Role;
 }

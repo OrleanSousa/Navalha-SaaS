@@ -18,6 +18,7 @@ import { memoryStorage } from 'multer';
 import { DataService } from './data.service';
 import {
   CreateEmployeeDto,
+  CreateEmployeeAccessDto,
   ListEmployeesQuery,
   SetEmployeeStatusDto,
   UpdateEmployeeDto,
@@ -78,6 +79,12 @@ export class DataController {
   uploadEmployeePhoto(@Param('id') id: string, @UploadedFile() photo?: Express.Multer.File) {
     if (!photo) throw new BadRequestException('Selecione uma foto');
     return this.data.uploadEmployeePhoto(id, photo);
+  }
+
+  @Post('employees/:id/access')
+  @RequirePermissions(Permissions.EMPLOYEES_ACCESS)
+  createEmployeeAccess(@Param('id') id: string, @Body() dto: CreateEmployeeAccessDto) {
+    return this.data.createEmployeeAccess(id, dto);
   }
 
   @Get('services')

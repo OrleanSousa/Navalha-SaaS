@@ -6,6 +6,7 @@ export const Permissions = {
   EMPLOYEES_UPDATE: 'employees.update',
   EMPLOYEES_STATUS: 'employees.status',
   EMPLOYEES_PHOTO: 'employees.photo',
+  EMPLOYEES_ACCESS: 'employees.access',
   SERVICES_READ: 'services.read',
   PRODUCTS_READ: 'products.read',
   APPOINTMENTS_READ: 'appointments.read',

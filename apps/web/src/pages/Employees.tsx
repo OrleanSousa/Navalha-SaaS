@@ -3,6 +3,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Camera,
+  KeyRound,
   Mail,
   Pencil,
   Phone,
@@ -36,7 +37,7 @@ type Employee = {
   active: boolean;
   color: string;
   defaultCommission: string | number;
-  user?: { email: string; active: boolean } | null;
+  user?: { id: string; email: string; role: string; active: boolean } | null;
   _count: { appointments: number; employeeServices: number };
 };
 
@@ -64,6 +65,8 @@ const emptyForm = {
   notes: '',
 };
 
+const emptyAccessForm = { email: '', password: '', role: 'BARBER' };
+
 export function Employees() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
@@ -76,6 +79,8 @@ export function Employees() {
   const [pendingStatusId, setPendingStatusId] = useState<string>();
   const [photoFile, setPhotoFile] = useState<File>();
   const [currentPhotoUrl, setCurrentPhotoUrl] = useState('');
+  const [accessEmployee, setAccessEmployee] = useState<Employee>();
+  const [accessForm, setAccessForm] = useState(emptyAccessForm);
   const [form, setForm] = useState(emptyForm);
 
   const photoPreview = useMemo(
@@ -165,6 +170,18 @@ export function Employees() {
     onSettled: () => setPendingStatusId(undefined),
   });
 
+  const createAccess = useMutation({
+    mutationFn: () => api.post(`/employees/${accessEmployee?.id}/access`, accessForm),
+    onSuccess: async () => {
+      toast.success('Acesso ao sistema criado');
+      setAccessEmployee(undefined);
+      setAccessForm(emptyAccessForm);
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível criar o acesso'),
+  });
+
   function closeForm() {
     setShowForm(false);
     setEditingId(undefined);
@@ -214,6 +231,13 @@ export function Employees() {
     setPhotoFile(file);
   }
 
+  function openAccess(employee: Employee) {
+    closeForm();
+    setAccessEmployee(employee);
+    setAccessForm({ email: employee.email || '', password: '', role: 'BARBER' });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
   return (
     <div className="page employees-module">
       <div className="module-head">
@@ -239,6 +263,58 @@ export function Employees() {
           )}
         </div>
       </div>
+
+      {accessEmployee && (
+        <form
+          className="card employee-access-form"
+          onSubmit={(event) => {
+            event.preventDefault();
+            createAccess.mutate();
+          }}
+        >
+          <div>
+            <h3>Criar acesso para {accessEmployee.name}</h3>
+            <p>As credenciais poderão ser usadas imediatamente após o cadastro.</p>
+          </div>
+          <label>
+            E-mail de acesso
+            <input
+              type="email"
+              value={accessForm.email}
+              onChange={(event) => setAccessForm({ ...accessForm, email: event.target.value })}
+              required
+            />
+          </label>
+          <label>
+            Senha inicial
+            <input
+              type="password"
+              value={accessForm.password}
+              onChange={(event) => setAccessForm({ ...accessForm, password: event.target.value })}
+              minLength={8}
+              required
+            />
+          </label>
+          <label>
+            Perfil
+            <select
+              value={accessForm.role}
+              onChange={(event) => setAccessForm({ ...accessForm, role: event.target.value })}
+            >
+              <option value="BARBER">Barbeiro</option>
+              <option value="RECEPTIONIST">Recepcionista</option>
+            </select>
+          </label>
+          <div className="employee-access-actions">
+            <button type="button" className="outline" onClick={() => setAccessEmployee(undefined)}>
+              Cancelar
+            </button>
+            <button type="submit" className="primary" disabled={createAccess.isPending}>
+              <KeyRound /> {createAccess.isPending ? 'Criando...' : 'Criar acesso'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {showForm && (
         <form
@@ -518,6 +594,16 @@ export function Employees() {
                           aria-label={`${employee.active ? 'Inativar' : 'Reativar'} ${employee.name}`}
                         >
                           {employee.active ? <PowerOff /> : <Power />}
+                        </button>
+                      )}
+                      {can(Permissions.EMPLOYEES_ACCESS) && !employee.user && employee.active && (
+                        <button
+                          className="icon access-action"
+                          onClick={() => openAccess(employee)}
+                          title="Criar acesso ao sistema"
+                          aria-label={`Criar acesso para ${employee.name}`}
+                        >
+                          <KeyRound />
                         </button>
                       )}
                     </div>
