@@ -1,7 +1,8 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Role } from '@prisma/client';
 import { DataService } from './data.service';
+import { ListEmployeesQuery } from './data.dto';
 import { Permissions, PermissionsGuard, RequirePermissions, Roles, RolesGuard } from './rbac';
 
 @Controller()
@@ -18,8 +19,8 @@ export class DataController {
 
   @Get('employees')
   @RequirePermissions(Permissions.EMPLOYEES_READ)
-  employees() {
-    return this.data.employees();
+  employees(@Query() query: ListEmployeesQuery) {
+    return this.data.employees(query);
   }
 
   @Get('services')

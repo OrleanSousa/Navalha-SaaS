@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
+import { EmployeeStatusFilter, ListEmployeesQuery } from './data.dto';
 
 @Injectable()
 export class DataService {
@@ -17,11 +19,59 @@ export class DataService {
     });
   }
 
-  employees() {
-    return this.db.employee.findMany({
-      where: { barbershopId: this.tenant.barbershopId, deletedAt: null },
-      orderBy: { name: 'asc' },
-    });
+  async employees(query: ListEmployeesQuery = new ListEmployeesQuery()) {
+    const page = query.page || 1;
+    const limit = query.limit || 10;
+    const search = query.search?.trim();
+    const position = query.position?.trim();
+    const where: Prisma.EmployeeWhereInput = {
+      barbershopId: this.tenant.barbershopId,
+      deletedAt: null,
+      ...(query.status === EmployeeStatusFilter.ACTIVE && { active: true }),
+      ...(query.status === EmployeeStatusFilter.INACTIVE && { active: false }),
+      ...(position && { position }),
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { email: { contains: search, mode: 'insensitive' } },
+          { phone: { contains: search, mode: 'insensitive' } },
+          { cpf: { contains: search, mode: 'insensitive' } },
+        ],
+      }),
+    };
+
+    const [items, total, positionRows] = await Promise.all([
+      this.db.employee.findMany({
+        where,
+        include: {
+          user: { select: { id: true, email: true, role: true, active: true } },
+          _count: { select: { appointments: true, employeeServices: true } },
+        },
+        orderBy: { name: 'asc' },
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.db.employee.count({ where }),
+      this.db.employee.findMany({
+        where: {
+          barbershopId: this.tenant.barbershopId,
+          deletedAt: null,
+          position: { not: null },
+        },
+        select: { position: true },
+        distinct: ['position'],
+        orderBy: { position: 'asc' },
+      }),
+    ]);
+
+    return {
+      items,
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+      positions: positionRows.map(({ position }) => position).filter(Boolean),
+    };
   }
 
   services() {

@@ -6,6 +6,7 @@ import { Agenda } from './pages/Agenda';
 import { Customers } from './pages/Customers';
 import { Catalog } from './pages/Catalog';
 import { Finance } from './pages/Finance';
+import { Employees } from './pages/Employees';
 import { Placeholder } from './pages/Placeholder';
 import { useAuth } from './lib/auth';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -37,6 +38,7 @@ export default function App() {
         <Route path="servicos" element={<Catalog type="services" />} />
         <Route path="produtos" element={<Catalog type="products" />} />
         <Route path="financeiro" element={<Finance />} />
+        <Route path="colaboradores" element={<Employees />} />
         <Route path=":page" element={<Placeholder />} />
       </Route>
     </Routes>
