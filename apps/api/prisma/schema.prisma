@@ -105,6 +105,16 @@ enum BillingAttemptStatus {
   CANCELLED
 }
 
+enum BillingGatewayProvider {
+  MANUAL
+  CUSTOM
+}
+
+enum BillingGatewayEnvironment {
+  SANDBOX
+  PRODUCTION
+}
+
 model Plan {
   id                   String         @id @default(uuid())
   name                 String         @unique
@@ -199,6 +209,20 @@ model SubscriptionBillingAttempt {
   @@unique([invoiceId, sequence])
   @@index([status, scheduledAt])
   @@index([invoiceId, scheduledAt])
+}
+
+model BillingGatewayConfiguration {
+  id                  String                    @id @default("default")
+  provider            BillingGatewayProvider    @default(MANUAL)
+  environment         BillingGatewayEnvironment @default(SANDBOX)
+  enabled             Boolean                   @default(false)
+  apiBaseUrl          String?
+  webhookUrl          String?
+  publicKey           String?
+  secretEnvVar        String                    @default("BILLING_GATEWAY_API_KEY")
+  webhookSecretEnvVar String                    @default("BILLING_GATEWAY_WEBHOOK_SECRET")
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
 }
 
 model BillingCoupon {

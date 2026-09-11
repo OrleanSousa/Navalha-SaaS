@@ -17,6 +17,8 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   BarbershopStatus,
   BillingAttemptStatus,
+  BillingGatewayEnvironment,
+  BillingGatewayProvider,
   BillingPaymentMethod,
   BillingPaymentStatus,
   CouponDiscountType,
@@ -38,6 +40,7 @@ import {
   IsOptional,
   IsString,
   IsUUID,
+  IsUrl,
   Matches,
   Max,
   Min,
@@ -265,6 +268,17 @@ export class FinancialOverviewQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(24) months = 6;
 }
 
+export class UpdateGatewayConfigurationDto {
+  @IsEnum(BillingGatewayProvider) provider: BillingGatewayProvider;
+  @IsEnum(BillingGatewayEnvironment) environment: BillingGatewayEnvironment;
+  @IsBoolean() enabled: boolean;
+  @IsOptional() @IsUrl({ require_tld: false, require_protocol: true }) apiBaseUrl?: string;
+  @IsOptional() @IsUrl({ require_tld: false, require_protocol: true }) webhookUrl?: string;
+  @IsOptional() @IsString() publicKey?: string;
+  @Matches(/^[A-Z][A-Z0-9_]{2,63}$/) secretEnvVar: string;
+  @Matches(/^[A-Z][A-Z0-9_]{2,63}$/) webhookSecretEnvVar: string;
+}
+
 export class CreateInvoiceDto {
   @Type(() => Number) @IsNumber() @Min(0.01) amount: number;
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) discount = 0;
@@ -385,6 +399,62 @@ export class SuperAdminService {
     });
     await this.audit(actorId, null, 'COUPON_UPDATED', 'BILLING_COUPON', id, coupon, updated);
     return updated;
+  }
+
+  async gatewayConfiguration() {
+    const configuration = await this.db.billingGatewayConfiguration.upsert({
+      where: { id: 'default' },
+      create: { id: 'default' },
+      update: {},
+    });
+    return {
+      ...configuration,
+      apiSecretConfigured: Boolean(process.env[configuration.secretEnvVar]),
+      webhookSecretConfigured: Boolean(process.env[configuration.webhookSecretEnvVar]),
+    };
+  }
+
+  async updateGatewayConfiguration(dto: UpdateGatewayConfigurationDto, actorId: string) {
+    const current = await this.gatewayConfiguration();
+    const apiBaseUrl = dto.apiBaseUrl?.trim() || null;
+    const webhookUrl = dto.webhookUrl?.trim() || null;
+    if (dto.enabled && dto.provider === BillingGatewayProvider.CUSTOM) {
+      if (!apiBaseUrl) throw new BadRequestException('Informe a URL base do gateway');
+      if (!process.env[dto.secretEnvVar]) {
+        throw new BadRequestException(
+          `A variável de ambiente ${dto.secretEnvVar} não está configurada`,
+        );
+      }
+      if (
+        dto.environment === BillingGatewayEnvironment.PRODUCTION &&
+        (!apiBaseUrl.startsWith('https://') || (webhookUrl && !webhookUrl.startsWith('https://')))
+      ) {
+        throw new BadRequestException('URLs de produção devem usar HTTPS');
+      }
+    }
+    const updated = await this.db.billingGatewayConfiguration.update({
+      where: { id: 'default' },
+      data: {
+        provider: dto.provider,
+        environment: dto.environment,
+        enabled: dto.enabled,
+        apiBaseUrl,
+        webhookUrl,
+        publicKey: dto.publicKey?.trim() || null,
+        secretEnvVar: dto.secretEnvVar,
+        webhookSecretEnvVar: dto.webhookSecretEnvVar,
+      },
+    });
+    await this.audit(
+      actorId,
+      null,
+      'BILLING_GATEWAY_CONFIGURATION_UPDATED',
+      'BILLING_GATEWAY_CONFIGURATION',
+      updated.id,
+      current,
+      updated,
+    );
+    return this.gatewayConfiguration();
   }
 
   async enforceDelinquencyRules(actorId?: string, onlyBarbershopId?: string) {
@@ -1623,6 +1693,19 @@ export class SuperAdminController {
   @Get('financial-overview')
   financialOverview(@Query() query: FinancialOverviewQuery) {
     return this.service.financialOverview(query);
+  }
+
+  @Get('billing/gateway')
+  gatewayConfiguration() {
+    return this.service.gatewayConfiguration();
+  }
+
+  @Patch('billing/gateway')
+  updateGatewayConfiguration(
+    @Body() dto: UpdateGatewayConfigurationDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.updateGatewayConfiguration(dto, user.sub);
   }
 
   @Get('invoices')

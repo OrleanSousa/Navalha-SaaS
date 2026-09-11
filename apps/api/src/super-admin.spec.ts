@@ -1,5 +1,12 @@
 import { BadRequestException } from '@nestjs/common';
-import { BarbershopStatus, CouponDiscountType, Prisma, SubscriptionStatus } from '@prisma/client';
+import {
+  BarbershopStatus,
+  BillingGatewayEnvironment,
+  BillingGatewayProvider,
+  CouponDiscountType,
+  Prisma,
+  SubscriptionStatus,
+} from '@prisma/client';
 import {
   buildDunningSchedule,
   calculateCommercialMetrics,
@@ -9,6 +16,59 @@ import {
 } from './super-admin';
 
 describe('SuperAdminService', () => {
+  it('informa a presença do segredo do gateway sem expor seu valor', async () => {
+    process.env.TEST_GATEWAY_KEY = 'secret-value';
+    const db = {
+      billingGatewayConfiguration: {
+        upsert: jest.fn().mockResolvedValue({
+          id: 'default',
+          provider: BillingGatewayProvider.CUSTOM,
+          secretEnvVar: 'TEST_GATEWAY_KEY',
+          webhookSecretEnvVar: 'TEST_WEBHOOK_KEY',
+        }),
+      },
+    };
+    const service = new SuperAdminService(db as any);
+
+    const result = await service.gatewayConfiguration();
+
+    expect(result.apiSecretConfigured).toBe(true);
+    expect(result.webhookSecretConfigured).toBe(false);
+    expect(JSON.stringify(result)).not.toContain('secret-value');
+    delete process.env.TEST_GATEWAY_KEY;
+  });
+
+  it('impede ativar gateway externo sem segredo no ambiente', async () => {
+    delete process.env.MISSING_GATEWAY_KEY;
+    const db = {
+      billingGatewayConfiguration: {
+        upsert: jest.fn().mockResolvedValue({
+          id: 'default',
+          provider: BillingGatewayProvider.MANUAL,
+          secretEnvVar: 'BILLING_GATEWAY_API_KEY',
+          webhookSecretEnvVar: 'BILLING_GATEWAY_WEBHOOK_SECRET',
+        }),
+        update: jest.fn(),
+      },
+    };
+    const service = new SuperAdminService(db as any);
+
+    await expect(
+      service.updateGatewayConfiguration(
+        {
+          provider: BillingGatewayProvider.CUSTOM,
+          environment: BillingGatewayEnvironment.SANDBOX,
+          enabled: true,
+          apiBaseUrl: 'https://gateway.example.com',
+          secretEnvVar: 'MISSING_GATEWAY_KEY',
+          webhookSecretEnvVar: 'TEST_WEBHOOK_KEY',
+        },
+        'actor-1',
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(db.billingGatewayConfiguration.update).not.toHaveBeenCalled();
+  });
+
   it('consolida faturamento, recebimentos e carteira por mês', () => {
     const result = calculateFinancialOverview({
       start: new Date(2026, 0, 1),
