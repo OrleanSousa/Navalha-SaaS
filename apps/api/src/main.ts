@@ -7,12 +7,21 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser = require('cookie-parser');
 import helmet from 'helmet';
 import type { NextFunction, Request, Response } from 'express';
+import { static as serveStatic } from 'express';
+import { join } from 'node:path';
 import { AppModule } from './app.module';
 import { HttpExceptionFilter } from './http-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.setGlobalPrefix('api');
+  app.use(
+    '/uploads',
+    serveStatic(process.env.UPLOAD_DIR || join(process.cwd(), 'uploads'), {
+      fallthrough: false,
+      maxAge: '1d',
+    }),
+  );
   const webOrigin = process.env.WEB_URL || 'http://localhost:5173';
   app.use((req: Request, res: Response, next: NextFunction) => {
     res.setHeader('Access-Control-Allow-Origin', webOrigin);
@@ -26,7 +35,7 @@ async function bootstrap() {
     }
     next();
   });
-  app.use(helmet());
+  app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cookieParser());
   app.useGlobalFilters(new HttpExceptionFilter());
   app.useGlobalPipes(

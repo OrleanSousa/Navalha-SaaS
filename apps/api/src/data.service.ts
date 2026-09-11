@@ -1,5 +1,13 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
+import { mkdir, unlink, writeFile } from 'node:fs/promises';
+import { randomUUID } from 'node:crypto';
+import { basename, join } from 'node:path';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
 import {
@@ -176,6 +184,60 @@ export class DataService {
       where: { id: employee.id },
       data: { active },
     });
+  }
+
+  async uploadEmployeePhoto(id: string, photo: Express.Multer.File) {
+    const employee = await this.db.employee.findFirst({
+      where: {
+        id,
+        barbershopId: this.tenant.barbershopId,
+        deletedAt: null,
+      },
+      select: { id: true, photoUrl: true },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+
+    const extensions: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+    };
+    const extension = extensions[photo.mimetype];
+    if (!extension) throw new BadRequestException('Formato de imagem não suportado');
+    const validSignature =
+      (photo.mimetype === 'image/jpeg' &&
+        photo.buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) ||
+      (photo.mimetype === 'image/png' &&
+        photo.buffer
+          .subarray(0, 8)
+          .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) ||
+      (photo.mimetype === 'image/webp' &&
+        photo.buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        photo.buffer.subarray(8, 12).toString('ascii') === 'WEBP');
+    if (!validSignature) throw new BadRequestException('Conteúdo da imagem inválido');
+
+    const directory = join(process.env.UPLOAD_DIR || join(process.cwd(), 'uploads'), 'employees');
+    const filename = `${randomUUID()}${extension}`;
+    const target = join(directory, filename);
+    const photoUrl = `/uploads/employees/${filename}`;
+    await mkdir(directory, { recursive: true });
+    await writeFile(target, photo.buffer);
+
+    let updated;
+    try {
+      updated = await this.db.employee.update({
+        where: { id: employee.id },
+        data: { photoUrl },
+      });
+    } catch (error) {
+      await unlink(target).catch(() => undefined);
+      throw error;
+    }
+
+    if (employee.photoUrl?.startsWith('/uploads/employees/')) {
+      await unlink(join(directory, basename(employee.photoUrl))).catch(() => undefined);
+    }
+    return updated;
   }
 
   services() {

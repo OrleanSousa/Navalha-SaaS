@@ -34,3 +34,7 @@ api.interceptors.response.use(
 );
 export const money = (v: number) =>
   new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(v);
+export const assetUrl = (path?: string | null) => {
+  if (!path || /^https?:\/\//i.test(path)) return path || '';
+  return `${baseURL.replace(/\/api\/?$/, '')}/${path.replace(/^\//, '')}`;
+};

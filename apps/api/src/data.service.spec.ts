@@ -1,10 +1,18 @@
 import { DataService } from './data.service';
+import * as fs from 'node:fs/promises';
+
+jest.mock('node:fs/promises', () => ({
+  mkdir: jest.fn().mockResolvedValue(undefined),
+  writeFile: jest.fn().mockResolvedValue(undefined),
+  unlink: jest.fn().mockResolvedValue(undefined),
+}));
 
 describe('DataService tenant isolation', () => {
   let db: any;
   let service: DataService;
 
   beforeEach(() => {
+    jest.clearAllMocks();
     db = {
       customer: { findMany: jest.fn().mockResolvedValue([]) },
       employee: {
@@ -182,6 +190,57 @@ describe('DataService tenant isolation', () => {
       'Colaborador não encontrado',
     );
     expect(db.employee.update).not.toHaveBeenCalled();
+  });
+
+  it('armazena foto somente para colaborador do tenant', async () => {
+    db.employee.findFirst.mockResolvedValue({
+      id: 'employee-1',
+      photoUrl: '/uploads/employees/old.png',
+    });
+    db.employee.update.mockImplementation(({ data }: any) =>
+      Promise.resolve({ id: 'employee-1', ...data }),
+    );
+    const buffer = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+    const result = await service.uploadEmployeePhoto('employee-1', {
+      mimetype: 'image/png',
+      buffer,
+    } as Express.Multer.File);
+
+    expect(fs.mkdir).toHaveBeenCalledWith(expect.stringContaining('employees'), {
+      recursive: true,
+    });
+    expect(fs.writeFile).toHaveBeenCalledWith(expect.stringMatching(/\.png$/), buffer);
+    expect(db.employee.update).toHaveBeenCalledWith({
+      where: { id: 'employee-1' },
+      data: { photoUrl: expect.stringMatching(/^\/uploads\/employees\/.+\.png$/) },
+    });
+    expect(result.photoUrl).toMatch(/^\/uploads\/employees\//);
+    expect(fs.unlink).toHaveBeenCalledWith(expect.stringMatching(/old\.png$/));
+  });
+
+  it('não grava foto para colaborador de outro tenant', async () => {
+    db.employee.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.uploadEmployeePhoto('employee-other', {
+        mimetype: 'image/png',
+        buffer: Buffer.from('imagem'),
+      } as Express.Multer.File),
+    ).rejects.toThrow('Colaborador não encontrado');
+    expect(fs.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('rejeita arquivo com MIME de imagem e conteúdo inválido', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1', photoUrl: null });
+
+    await expect(
+      service.uploadEmployeePhoto('employee-1', {
+        mimetype: 'image/png',
+        buffer: Buffer.from('não é imagem'),
+      } as Express.Multer.File),
+    ).rejects.toThrow('Conteúdo da imagem inválido');
+    expect(fs.writeFile).not.toHaveBeenCalled();
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {

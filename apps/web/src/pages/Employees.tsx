@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ChevronLeft,
   ChevronRight,
+  Camera,
   Mail,
   Pencil,
   Phone,
@@ -13,9 +14,9 @@ import {
   UserRound,
   X,
 } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { api } from '../lib/api';
+import { api, assetUrl } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Permissions } from '../lib/permissions';
 
@@ -73,7 +74,21 @@ export function Employees() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string>();
   const [pendingStatusId, setPendingStatusId] = useState<string>();
+  const [photoFile, setPhotoFile] = useState<File>();
+  const [currentPhotoUrl, setCurrentPhotoUrl] = useState('');
   const [form, setForm] = useState(emptyForm);
+
+  const photoPreview = useMemo(
+    () => (photoFile ? URL.createObjectURL(photoFile) : currentPhotoUrl),
+    [photoFile, currentPhotoUrl],
+  );
+
+  useEffect(
+    () => () => {
+      if (photoFile && photoPreview) URL.revokeObjectURL(photoPreview);
+    },
+    [photoFile, photoPreview],
+  );
 
   useEffect(() => setPage(1), [search, status, position]);
 
@@ -95,7 +110,7 @@ export function Employees() {
   });
 
   const save = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const values = editingId
         ? Object.fromEntries(
             Object.entries(form).map(([key, value]) => [key, value === '' ? null : value]),
@@ -106,12 +121,28 @@ export function Employees() {
             ),
           );
       const payload = { ...values, defaultCommission: Number(form.defaultCommission) };
-      return editingId
+      const response = editingId
         ? api.patch(`/employees/${editingId}`, payload)
         : api.post('/employees', payload);
+      const saved = await response;
+      let photoUploaded = true;
+      if (photoFile) {
+        const photo = new FormData();
+        photo.append('photo', photoFile);
+        try {
+          await api.post(`/employees/${saved.data.id}/photo`, photo);
+        } catch {
+          photoUploaded = false;
+        }
+      }
+      return { saved, photoUploaded };
     },
-    onSuccess: async () => {
-      toast.success(editingId ? 'Colaborador atualizado' : 'Colaborador cadastrado');
+    onSuccess: async ({ photoUploaded }) => {
+      if (photoUploaded) {
+        toast.success(editingId ? 'Colaborador atualizado' : 'Colaborador cadastrado');
+      } else {
+        toast.warning('Dados salvos, mas não foi possível enviar a foto');
+      }
       closeForm();
       setPage(1);
       await queryClient.invalidateQueries({ queryKey: ['employees'] });
@@ -137,11 +168,15 @@ export function Employees() {
   function closeForm() {
     setShowForm(false);
     setEditingId(undefined);
+    setPhotoFile(undefined);
+    setCurrentPhotoUrl('');
     setForm(emptyForm);
   }
 
   function edit(employee: Employee) {
     setEditingId(employee.id);
+    setPhotoFile(undefined);
+    setCurrentPhotoUrl(assetUrl(employee.photoUrl));
     setForm({
       name: employee.name,
       cpf: employee.cpf || '',
@@ -166,6 +201,19 @@ export function Employees() {
     changeStatus.mutate({ id: employee.id, active: !employee.active });
   }
 
+  function selectPhoto(file?: File) {
+    if (!file) return;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      toast.error('Selecione uma imagem JPEG, PNG ou WebP');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('A foto deve ter no máximo 5 MB');
+      return;
+    }
+    setPhotoFile(file);
+  }
+
   return (
     <div className="page employees-module">
       <div className="module-head">
@@ -180,6 +228,8 @@ export function Employees() {
               className="primary"
               onClick={() => {
                 setEditingId(undefined);
+                setPhotoFile(undefined);
+                setCurrentPhotoUrl('');
                 setForm(emptyForm);
                 setShowForm(true);
               }}
@@ -213,6 +263,25 @@ export function Employees() {
               <X />
             </button>
           </div>
+          {can(Permissions.EMPLOYEES_PHOTO) && (
+            <div className="employee-photo-field">
+              <span className="employee-photo-preview">
+                {photoPreview ? <img src={photoPreview} alt="Prévia da foto" /> : <Camera />}
+              </span>
+              <div>
+                <b>Foto do colaborador</b>
+                <small>JPEG, PNG ou WebP, até 5 MB</small>
+              </div>
+              <label className="outline">
+                <Camera /> Selecionar foto
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={(event) => selectPhoto(event.target.files?.[0])}
+                />
+              </label>
+            </div>
+          )}
           <div className="employee-form-grid">
             <label>
               Nome completo
@@ -387,7 +456,7 @@ export function Employees() {
                   <td>
                     <div className="employee-person">
                       {employee.photoUrl ? (
-                        <img src={employee.photoUrl} alt="" />
+                        <img src={assetUrl(employee.photoUrl)} alt="" />
                       ) : (
                         <span
                           style={{ backgroundColor: `${employee.color}24`, color: employee.color }}

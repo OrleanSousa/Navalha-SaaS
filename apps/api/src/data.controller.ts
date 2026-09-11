@@ -1,6 +1,20 @@
-import { Body, Controller, Get, Param, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+  UploadedFile,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
+import { memoryStorage } from 'multer';
 import { DataService } from './data.service';
 import {
   CreateEmployeeDto,
@@ -44,6 +58,26 @@ export class DataController {
   @RequirePermissions(Permissions.EMPLOYEES_STATUS)
   setEmployeeStatus(@Param('id') id: string, @Body() dto: SetEmployeeStatusDto) {
     return this.data.setEmployeeStatus(id, dto.active);
+  }
+
+  @Post('employees/:id/photo')
+  @RequirePermissions(Permissions.EMPLOYEES_PHOTO)
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      fileFilter: (_request, file, callback) => {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+          callback(new BadRequestException('Envie uma imagem JPEG, PNG ou WebP'), false);
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  uploadEmployeePhoto(@Param('id') id: string, @UploadedFile() photo?: Express.Multer.File) {
+    if (!photo) throw new BadRequestException('Selecione uma foto');
+    return this.data.uploadEmployeePhoto(id, photo);
   }
 
   @Get('services')
