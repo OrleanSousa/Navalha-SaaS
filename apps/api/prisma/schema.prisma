@@ -106,31 +106,34 @@ enum BillingAttemptStatus {
 }
 
 model Plan {
-  id            String         @id @default(uuid())
-  name          String         @unique
-  price         Decimal        @db.Decimal(10, 2)
-  maxEmployees  Int
-  maxUsers      Int
-  features      Json
-  active        Boolean        @default(true)
-  subscriptions Subscription[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id                   String         @id @default(uuid())
+  name                 String         @unique
+  price                Decimal        @db.Decimal(10, 2)
+  maxEmployees         Int
+  maxUsers             Int
+  delinquencyGraceDays Int            @default(7)
+  features             Json
+  active               Boolean        @default(true)
+  subscriptions        Subscription[]
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
 }
 
 model Subscription {
-  id           String                @id @default(uuid())
-  barbershopId String                @unique
-  planId       String
-  status       SubscriptionStatus    @default(TRIAL)
-  startedAt    DateTime              @default(now())
-  expiresAt    DateTime?
-  trialEndsAt  DateTime?
-  graceEndsAt  DateTime?
-  barbershop   Barbershop            @relation(fields: [barbershopId], references: [id])
-  plan         Plan                  @relation(fields: [planId], references: [id])
-  history      SubscriptionHistory[]
-  invoices     SubscriptionInvoice[]
+  id                     String                @id @default(uuid())
+  barbershopId           String                @unique
+  planId                 String
+  status                 SubscriptionStatus    @default(TRIAL)
+  startedAt              DateTime              @default(now())
+  expiresAt              DateTime?
+  trialEndsAt            DateTime?
+  graceEndsAt            DateTime?
+  delinquencyStartedAt   DateTime?
+  delinquencySuspendedAt DateTime?
+  barbershop             Barbershop            @relation(fields: [barbershopId], references: [id])
+  plan                   Plan                  @relation(fields: [planId], references: [id])
+  history                SubscriptionHistory[]
+  invoices               SubscriptionInvoice[]
 }
 
 model SubscriptionHistory {

@@ -149,6 +149,7 @@ export class CreatePlanDto {
   @Type(() => Number) @IsNumber() @Min(0) price: number;
   @Type(() => Number) @IsInt() @Min(0) maxEmployees: number;
   @Type(() => Number) @IsInt() @Min(0) maxUsers: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(90) delinquencyGraceDays = 7;
   @IsObject() features: Record<string, boolean>;
 }
 
@@ -157,6 +158,7 @@ export class UpdatePlanDto {
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) price?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) maxEmployees?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) maxUsers?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(90) delinquencyGraceDays?: number;
   @IsOptional() @IsObject() features?: Record<string, boolean>;
   @IsOptional() @IsBoolean() active?: boolean;
 }
@@ -245,6 +247,7 @@ export class SuperAdminService {
         price: dto.price,
         maxEmployees: dto.maxEmployees,
         maxUsers: dto.maxUsers,
+        delinquencyGraceDays: dto.delinquencyGraceDays,
         features: dto.features,
         active: true,
       },
@@ -319,6 +322,147 @@ export class SuperAdminService {
     return updated;
   }
 
+  async enforceDelinquencyRules(actorId?: string, onlyBarbershopId?: string) {
+    const now = new Date();
+    const subscriptions = await this.db.subscription.findMany({
+      where: {
+        ...(onlyBarbershopId ? { barbershopId: onlyBarbershopId } : {}),
+        status: { notIn: [SubscriptionStatus.CANCELLED, SubscriptionStatus.EXPIRED] },
+        barbershop: { deletedAt: null },
+      },
+      include: {
+        plan: true,
+        barbershop: { select: { status: true } },
+        invoices: {
+          where: { status: InvoiceStatus.OVERDUE },
+          orderBy: { dueDate: 'asc' },
+          select: { id: true, dueDate: true },
+        },
+      },
+    });
+    let markedPastDue = 0;
+    let suspended = 0;
+    let reactivated = 0;
+
+    for (const subscription of subscriptions) {
+      const oldestOverdue = subscription.invoices[0];
+      if (!oldestOverdue) {
+        if (!subscription.delinquencyStartedAt) continue;
+        await this.db.$transaction(async (tx) => {
+          await tx.subscription.update({
+            where: { id: subscription.id },
+            data: {
+              status: SubscriptionStatus.ACTIVE,
+              delinquencyStartedAt: null,
+              delinquencySuspendedAt: null,
+            },
+          });
+          if (
+            subscription.delinquencySuspendedAt &&
+            subscription.barbershop.status === BarbershopStatus.SUSPENDED
+          ) {
+            await tx.barbershop.update({
+              where: { id: subscription.barbershopId },
+              data: { status: BarbershopStatus.ACTIVE },
+            });
+          }
+          await tx.subscriptionHistory.create({
+            data: {
+              subscriptionId: subscription.id,
+              barbershopId: subscription.barbershopId,
+              actorId,
+              action: 'DELINQUENCY_CLEARED',
+              fromPlanId: subscription.planId,
+              toPlanId: subscription.planId,
+              fromStatus: subscription.status,
+              toStatus: SubscriptionStatus.ACTIVE,
+            },
+          });
+        });
+        reactivated += 1;
+        continue;
+      }
+
+      if (
+        subscription.status === SubscriptionStatus.SUSPENDED &&
+        !subscription.delinquencyStartedAt
+      ) {
+        continue;
+      }
+      const suspensionAt = new Date(
+        oldestOverdue.dueDate.getTime() + subscription.plan.delinquencyGraceDays * 86400000,
+      );
+      const graceActive = Boolean(subscription.graceEndsAt && subscription.graceEndsAt > now);
+      const targetStatus =
+        now >= suspensionAt && !graceActive
+          ? SubscriptionStatus.SUSPENDED
+          : SubscriptionStatus.PAST_DUE;
+      if (
+        subscription.status === targetStatus &&
+        subscription.delinquencyStartedAt &&
+        (targetStatus !== SubscriptionStatus.SUSPENDED || subscription.delinquencySuspendedAt)
+      ) {
+        continue;
+      }
+
+      await this.db.$transaction(async (tx) => {
+        await tx.subscription.update({
+          where: { id: subscription.id },
+          data: {
+            status: targetStatus,
+            delinquencyStartedAt: subscription.delinquencyStartedAt || oldestOverdue.dueDate,
+            delinquencySuspendedAt:
+              targetStatus === SubscriptionStatus.SUSPENDED
+                ? subscription.delinquencySuspendedAt || now
+                : null,
+          },
+        });
+        if (
+          targetStatus === SubscriptionStatus.SUSPENDED &&
+          subscription.barbershop.status !== BarbershopStatus.SUSPENDED
+        ) {
+          await tx.barbershop.update({
+            where: { id: subscription.barbershopId },
+            data: { status: BarbershopStatus.SUSPENDED },
+          });
+        } else if (
+          targetStatus === SubscriptionStatus.PAST_DUE &&
+          subscription.delinquencySuspendedAt &&
+          subscription.barbershop.status === BarbershopStatus.SUSPENDED
+        ) {
+          await tx.barbershop.update({
+            where: { id: subscription.barbershopId },
+            data: { status: BarbershopStatus.ACTIVE },
+          });
+        }
+        await tx.subscriptionHistory.create({
+          data: {
+            subscriptionId: subscription.id,
+            barbershopId: subscription.barbershopId,
+            actorId,
+            action:
+              targetStatus === SubscriptionStatus.SUSPENDED
+                ? 'DELINQUENCY_SUSPENDED'
+                : 'DELINQUENCY_STARTED',
+            fromPlanId: subscription.planId,
+            toPlanId: subscription.planId,
+            fromStatus: subscription.status,
+            toStatus: targetStatus,
+            metadata: {
+              invoiceId: oldestOverdue.id,
+              dueDate: oldestOverdue.dueDate.toISOString(),
+              graceDays: subscription.plan.delinquencyGraceDays,
+            },
+          },
+        });
+      });
+      if (targetStatus === SubscriptionStatus.SUSPENDED) suspended += 1;
+      else markedPastDue += 1;
+    }
+
+    return { evaluated: subscriptions.length, markedPastDue, suspended, reactivated };
+  }
+
   async dashboard() {
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -327,6 +471,7 @@ export class SuperAdminService {
       where: { status: InvoiceStatus.PENDING, dueDate: { lt: now } },
       data: { status: InvoiceStatus.OVERDUE },
     });
+    await this.enforceDelinquencyRules();
     const [
       total,
       active,
@@ -466,6 +611,7 @@ export class SuperAdminService {
       where: { status: InvoiceStatus.PENDING, dueDate: { lt: new Date() } },
       data: { status: InvoiceStatus.OVERDUE },
     });
+    await this.enforceDelinquencyRules();
     const page = query.page || 1;
     const limit = query.limit || 20;
     const search = query.search?.trim();
@@ -734,6 +880,7 @@ export class SuperAdminService {
       invoice,
       updated,
     );
+    await this.enforceDelinquencyRules(actorId, invoice.barbershopId);
     return updated;
   }
 
@@ -763,6 +910,7 @@ export class SuperAdminService {
       invoice,
       updated,
     );
+    await this.enforceDelinquencyRules(actorId, invoice.barbershopId);
     return updated;
   }
 
@@ -858,6 +1006,7 @@ export class SuperAdminService {
       invoice,
       updated,
     );
+    await this.enforceDelinquencyRules(actorId, invoice.barbershopId);
     return updated;
   }
 
@@ -1064,7 +1213,11 @@ export class SuperAdminService {
       ) {
         await tx.subscription.update({
           where: { id: barbershop.subscription.id },
-          data: { status: subscriptionStatus[status] },
+          data: {
+            status: subscriptionStatus[status],
+            delinquencyStartedAt: null,
+            delinquencySuspendedAt: null,
+          },
         });
         await tx.subscriptionHistory.create({
           data: {
@@ -1357,6 +1510,11 @@ export class SuperAdminController {
   @Get('dashboard')
   dashboard() {
     return this.service.dashboard();
+  }
+
+  @Post('billing/enforce-delinquency')
+  enforceDelinquency(@CurrentUser() user: AuthenticatedUser) {
+    return this.service.enforceDelinquencyRules(user.sub);
   }
 
   @Get('invoices')

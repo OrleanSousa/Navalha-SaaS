@@ -10,12 +10,20 @@ type Plan = {
   price: string | number;
   maxEmployees: number;
   maxUsers: number;
+  delinquencyGraceDays: number;
   features: Record<string, boolean> & { pendingDefinition?: boolean };
   active: boolean;
   _count: { subscriptions: number };
 };
 
-const emptyForm = { name: '', price: '0', maxEmployees: '0', maxUsers: '0', features: '' };
+const emptyForm = {
+  name: '',
+  price: '0',
+  maxEmployees: '0',
+  maxUsers: '0',
+  delinquencyGraceDays: '7',
+  features: '',
+};
 
 export function SuperPlans() {
   const queryClient = useQueryClient();
@@ -40,6 +48,7 @@ export function SuperPlans() {
         price: Number(form.price),
         maxEmployees: Number(form.maxEmployees),
         maxUsers: Number(form.maxUsers),
+        delinquencyGraceDays: Number(form.delinquencyGraceDays),
         features,
       };
       return editingId
@@ -75,6 +84,7 @@ export function SuperPlans() {
       price: String(plan.price),
       maxEmployees: String(plan.maxEmployees),
       maxUsers: String(plan.maxUsers),
+      delinquencyGraceDays: String(plan.delinquencyGraceDays),
       features,
     });
     setShowForm(true);
@@ -145,6 +155,18 @@ export function SuperPlans() {
               required
             />
           </label>
+          <label>
+            Prazo antes da suspensão
+            <input
+              type="number"
+              min="0"
+              max="90"
+              value={form.delinquencyGraceDays}
+              onChange={(e) => setForm({ ...form, delinquencyGraceDays: e.target.value })}
+              required
+            />
+            <small>Dias após o vencimento.</small>
+          </label>
           <label className="wide">
             Benefícios
             <input
@@ -176,7 +198,7 @@ export function SuperPlans() {
             <p>
               {plan.features?.pendingDefinition
                 ? 'Benefícios e limites aguardando definição.'
-                : `${plan.maxUsers} usuários e ${plan.maxEmployees} colaboradores`}
+                : `${plan.maxUsers} usuários, ${plan.maxEmployees} colaboradores e suspensão em ${plan.delinquencyGraceDays} dias`}
             </p>
             <div>
               <small>{plan._count.subscriptions} ASSINATURA(S)</small>

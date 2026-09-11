@@ -71,13 +71,104 @@ describe('SuperAdminService', () => {
 
     expect(tx.subscription.update).toHaveBeenCalledWith({
       where: { id: 'subscription-1' },
-      data: { status: SubscriptionStatus.CANCELLED },
+      data: {
+        status: SubscriptionStatus.CANCELLED,
+        delinquencyStartedAt: null,
+        delinquencySuspendedAt: null,
+      },
     });
     expect(tx.subscriptionHistory.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         action: 'BARBERSHOP_STATUS_SYNCED',
         toStatus: SubscriptionStatus.CANCELLED,
       }),
+    });
+  });
+
+  it('suspende automaticamente uma assinatura acima do prazo de inadimplência', async () => {
+    const tx = {
+      subscription: { update: jest.fn().mockResolvedValue({}) },
+      barbershop: { update: jest.fn().mockResolvedValue({}) },
+      subscriptionHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const db = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'subscription-1',
+            barbershopId: 'shop-1',
+            planId: 'plan-1',
+            status: SubscriptionStatus.ACTIVE,
+            graceEndsAt: null,
+            delinquencyStartedAt: null,
+            delinquencySuspendedAt: null,
+            plan: { delinquencyGraceDays: 7 },
+            barbershop: { status: BarbershopStatus.ACTIVE },
+            invoices: [{ id: 'invoice-1', dueDate: new Date('2020-01-01T12:00:00.000Z') }],
+          },
+        ]),
+      },
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const service = new SuperAdminService(db as any);
+
+    const result = await service.enforceDelinquencyRules();
+
+    expect(result.suspended).toBe(1);
+    expect(tx.subscription.update).toHaveBeenCalledWith({
+      where: { id: 'subscription-1' },
+      data: expect.objectContaining({
+        status: SubscriptionStatus.SUSPENDED,
+        delinquencyStartedAt: new Date('2020-01-01T12:00:00.000Z'),
+        delinquencySuspendedAt: expect.any(Date),
+      }),
+    });
+    expect(tx.barbershop.update).toHaveBeenCalledWith({
+      where: { id: 'shop-1' },
+      data: { status: BarbershopStatus.SUSPENDED },
+    });
+  });
+
+  it('reativa somente uma suspensão marcada como financeira', async () => {
+    const tx = {
+      subscription: { update: jest.fn().mockResolvedValue({}) },
+      barbershop: { update: jest.fn().mockResolvedValue({}) },
+      subscriptionHistory: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const db = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          {
+            id: 'subscription-1',
+            barbershopId: 'shop-1',
+            planId: 'plan-1',
+            status: SubscriptionStatus.SUSPENDED,
+            delinquencyStartedAt: new Date('2026-09-01T12:00:00.000Z'),
+            delinquencySuspendedAt: new Date('2026-09-08T12:00:00.000Z'),
+            plan: { delinquencyGraceDays: 7 },
+            barbershop: { status: BarbershopStatus.SUSPENDED },
+            invoices: [],
+          },
+        ]),
+      },
+      $transaction: jest.fn((callback) => callback(tx)),
+    };
+    const service = new SuperAdminService(db as any);
+
+    const result = await service.enforceDelinquencyRules();
+
+    expect(result.reactivated).toBe(1);
+    expect(tx.subscription.update).toHaveBeenCalledWith({
+      where: { id: 'subscription-1' },
+      data: {
+        status: SubscriptionStatus.ACTIVE,
+        delinquencyStartedAt: null,
+        delinquencySuspendedAt: null,
+      },
+    });
+    expect(tx.barbershop.update).toHaveBeenCalledWith({
+      where: { id: 'shop-1' },
+      data: { status: BarbershopStatus.ACTIVE },
     });
   });
 
