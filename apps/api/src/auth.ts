@@ -106,12 +106,16 @@ export class AuthService {
       throw new UnauthorizedException('Barbearia indisponível');
     }
     const subscription = barbershop.subscription;
-    if (!subscription || !['ACTIVE', 'TRIAL'].includes(subscription.status)) {
+    if (!subscription || !['ACTIVE', 'TRIAL', 'PAST_DUE'].includes(subscription.status)) {
       throw new UnauthorizedException('Assinatura indisponível');
     }
     const deadline =
       subscription.status === 'TRIAL' ? subscription.trialEndsAt : subscription.expiresAt;
-    if (deadline && deadline <= new Date()) {
+    if (
+      deadline &&
+      deadline <= new Date() &&
+      (!subscription.graceEndsAt || subscription.graceEndsAt <= new Date())
+    ) {
       throw new UnauthorizedException('Assinatura expirada');
     }
   }

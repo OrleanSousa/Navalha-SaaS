@@ -1,5 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
-import { Building2, CircleDollarSign, Clock3, Users } from 'lucide-react';
+import {
+  BadgeAlert,
+  Building2,
+  CircleDollarSign,
+  Clock3,
+  ReceiptText,
+  UserMinus,
+  Users,
+} from 'lucide-react';
 import { api, money } from '../lib/api';
 
 type Dashboard = {
@@ -11,6 +19,14 @@ type Dashboard = {
     users: number;
     employees: number;
     mrr: number;
+    arr: number;
+    averageTicket: number;
+    paidRevenue: number;
+    paidInvoices: number;
+    churned: number;
+    churnRate: number;
+    overdueAmount: number;
+    delinquencyRate: number;
   };
   planDistribution: Record<string, number>;
   recent: Array<{
@@ -77,7 +93,39 @@ export function SuperOverview({ onShowTenants }: { onShowTenants(): void }) {
           <div>
             <small>MRR ATUAL</small>
             <b>{money(metrics.mrr)}</b>
-            <em>Valores dos planos ativos</em>
+            <em>ARR de {money(metrics.arr)}</em>
+          </div>
+        </article>
+      </div>
+      <div className="metrics commercial-metrics">
+        <article className="metric">
+          <span className="green">
+            <ReceiptText />
+          </span>
+          <div>
+            <small>TICKET MÉDIO</small>
+            <b>{money(metrics.averageTicket)}</b>
+            <em>{metrics.paidInvoices} faturas pagas no mês</em>
+          </div>
+        </article>
+        <article className="metric">
+          <span className="amber">
+            <UserMinus />
+          </span>
+          <div>
+            <small>CHURN DO MÊS</small>
+            <b>{metrics.churnRate.toLocaleString('pt-BR')}%</b>
+            <em>{metrics.churned} cancelamentos</em>
+          </div>
+        </article>
+        <article className="metric">
+          <span className="red">
+            <BadgeAlert />
+          </span>
+          <div>
+            <small>INADIMPLÊNCIA</small>
+            <b>{metrics.delinquencyRate.toLocaleString('pt-BR')}%</b>
+            <em>{money(metrics.overdueAmount)} vencidos no mês</em>
           </div>
         </article>
       </div>

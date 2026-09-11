@@ -54,6 +54,7 @@ export function SuperAdmin() {
   const [tenantEdit, setTenantEdit] = useState<TenantEdit>();
   const [trialDays, setTrialDays] = useState(14);
   const [renewalMonths, setRenewalMonths] = useState(1);
+  const [graceDays, setGraceDays] = useState(7);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmation, setShowConfirmation] = useState(false);
   const [form, setForm] = useState(emptyForm);
@@ -156,6 +157,26 @@ export function SuperAdmin() {
     },
     onError: (error: any) =>
       toast.error(error.response?.data?.message || 'Não foi possível renovar a assinatura'),
+  });
+
+  const configureGracePeriod = useMutation({
+    mutationFn: () =>
+      api.post(`/super-admin/barbershops/${selectedShopId}/subscription/grace-period`, {
+        days: graceDays,
+      }),
+    onSuccess: async () => {
+      toast.success(graceDays ? 'Período de cortesia atualizado' : 'Cortesia removida');
+      await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ['super-admin', 'barbershop', selectedShopId],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['super-admin', 'subscription-history', selectedShopId],
+        }),
+      ]);
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível configurar a cortesia'),
   });
 
   function update(field: keyof typeof emptyForm, value: string) {
@@ -605,6 +626,12 @@ export function SuperAdmin() {
                       {new Date(selectedShop.subscription.expiresAt).toLocaleDateString('pt-BR')}
                     </small>
                   )}
+                  {selectedShop.subscription?.graceEndsAt && (
+                    <small>
+                      Cortesia até{' '}
+                      {new Date(selectedShop.subscription.graceEndsAt).toLocaleDateString('pt-BR')}
+                    </small>
+                  )}
                 </div>
                 <label>
                   Dias de teste
@@ -646,6 +673,23 @@ export function SuperAdmin() {
                   disabled={renewSubscription.isPending}
                 >
                   Renovar
+                </button>
+                <label>
+                  Dias de cortesia
+                  <input
+                    type="number"
+                    min="0"
+                    max="365"
+                    value={graceDays}
+                    onChange={(e) => setGraceDays(Number(e.target.value))}
+                  />
+                </label>
+                <button
+                  className="outline"
+                  onClick={() => configureGracePeriod.mutate()}
+                  disabled={configureGracePeriod.isPending}
+                >
+                  {graceDays ? 'Aplicar cortesia' : 'Remover cortesia'}
                 </button>
               </section>
               <div className="tenant-detail-grid">

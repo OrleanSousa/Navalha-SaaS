@@ -93,6 +93,11 @@ enum BillingPaymentMethod {
   OTHER
 }
 
+enum CouponDiscountType {
+  PERCENTAGE
+  FIXED
+}
+
 model Plan {
   id            String         @id @default(uuid())
   name          String         @unique
@@ -114,6 +119,7 @@ model Subscription {
   startedAt    DateTime              @default(now())
   expiresAt    DateTime?
   trialEndsAt  DateTime?
+  graceEndsAt  DateTime?
   barbershop   Barbershop            @relation(fields: [barbershopId], references: [id])
   plan         Plan                  @relation(fields: [planId], references: [id])
   history      SubscriptionHistory[]
@@ -155,12 +161,46 @@ model SubscriptionInvoice {
   subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   barbershop     Barbershop            @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   payments       SubscriptionPayment[]
+  couponRedemption BillingCouponRedemption?
   createdAt      DateTime              @default(now())
   updatedAt      DateTime              @updatedAt
 
   @@index([barbershopId, dueDate])
   @@index([status, dueDate])
   @@index([subscriptionId])
+}
+
+model BillingCoupon {
+  id             String                    @id @default(uuid())
+  code           String                    @unique
+  description    String?
+  discountType   CouponDiscountType
+  value          Decimal                   @db.Decimal(10, 2)
+  validFrom      DateTime                  @default(now())
+  validUntil     DateTime?
+  maxRedemptions Int?
+  active         Boolean                   @default(true)
+  redemptions    BillingCouponRedemption[]
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  @@index([active, validFrom, validUntil])
+}
+
+model BillingCouponRedemption {
+  id           String              @id @default(uuid())
+  couponId     String
+  invoiceId    String              @unique
+  barbershopId String
+  actorId      String?
+  discount     Decimal             @db.Decimal(10, 2)
+  redeemedAt   DateTime            @default(now())
+  coupon       BillingCoupon       @relation(fields: [couponId], references: [id], onDelete: Restrict)
+  invoice      SubscriptionInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  barbershop   Barbershop          @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+
+  @@unique([couponId, barbershopId])
+  @@index([barbershopId, redeemedAt])
 }
 
 model SubscriptionPayment {
@@ -211,6 +251,7 @@ model Barbershop {
   notifications         Notification[]
   auditLogs             AuditLog[]
   subscriptionInvoices  SubscriptionInvoice[]
+  couponRedemptions     BillingCouponRedemption[]
   subscription          Subscription?
   settings              Setting?
   createdAt             DateTime               @default(now())

@@ -17,6 +17,7 @@ import { AuthGuard } from '@nestjs/passport';
 import {
   BarbershopStatus,
   BillingPaymentMethod,
+  CouponDiscountType,
   InvoiceStatus,
   Prisma,
   Role,
@@ -48,6 +49,33 @@ import { AllowSuperAdmin, PermissionsGuard, Roles, RolesGuard } from './rbac';
 
 const STRONG_PASSWORD = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+export function calculateCommercialMetrics(input: {
+  mrr: number;
+  activeSubscriptions: number;
+  cancellations: number;
+  paidRevenue: number;
+  averageTicket: number;
+  paidInvoices: number;
+  overdueAmount: number;
+  paidDueAmount: number;
+}) {
+  const churnBase = input.activeSubscriptions + input.cancellations;
+  const billedAmount = input.overdueAmount + input.paidDueAmount;
+  return {
+    mrr: input.mrr,
+    arr: input.mrr * 12,
+    averageTicket: input.averageTicket,
+    paidRevenue: input.paidRevenue,
+    paidInvoices: input.paidInvoices,
+    churned: input.cancellations,
+    churnRate: churnBase ? Number(((input.cancellations / churnBase) * 100).toFixed(2)) : 0,
+    overdueAmount: input.overdueAmount,
+    delinquencyRate: billedAmount
+      ? Number(((input.overdueAmount / billedAmount) * 100).toFixed(2))
+      : 0,
+  };
+}
 
 export enum DocumentType {
   CPF = 'CPF',
@@ -132,6 +160,28 @@ export class RenewSubscriptionDto {
   @Type(() => Number) @IsInt() @Min(1) @Max(36) months: number;
 }
 
+export class ConfigureGracePeriodDto {
+  @Type(() => Number) @IsInt() @Min(0) @Max(365) days: number;
+}
+
+export class CreateBillingCouponDto {
+  @Transform(({ value }) => String(value).trim().toUpperCase())
+  @Matches(/^[A-Z0-9_-]{3,30}$/, {
+    message: 'O código deve ter entre 3 e 30 letras, números, hífens ou sublinhados',
+  })
+  code: string;
+  @IsOptional() @IsString() description?: string;
+  @IsEnum(CouponDiscountType) discountType: CouponDiscountType;
+  @Type(() => Number) @IsNumber() @Min(0.01) value: number;
+  @IsOptional() @IsDateString() validFrom?: string;
+  @IsOptional() @IsDateString() validUntil?: string;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) maxRedemptions?: number;
+}
+
+export class UpdateBillingCouponDto {
+  @IsBoolean() active: boolean;
+}
+
 export class ListInvoicesQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page = 1;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = 20;
@@ -144,6 +194,10 @@ export class CreateInvoiceDto {
   @IsOptional() @Type(() => Number) @IsNumber() @Min(0) discount = 0;
   @IsDateString() dueDate: string;
   @IsOptional() @IsString() notes?: string;
+  @IsOptional()
+  @Transform(({ value }) => String(value).trim().toUpperCase())
+  @Matches(/^[A-Z0-9_-]{3,30}$/)
+  couponCode?: string;
 }
 
 export class RegisterInvoicePaymentDto {
@@ -203,37 +257,145 @@ export class SuperAdminService {
     return updated;
   }
 
+  coupons() {
+    return this.db.billingCoupon.findMany({
+      include: { _count: { select: { redemptions: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async createCoupon(dto: CreateBillingCouponDto, actorId: string) {
+    if (dto.discountType === CouponDiscountType.PERCENTAGE && dto.value > 100) {
+      throw new BadRequestException('O desconto percentual não pode ultrapassar 100%');
+    }
+    const validFrom = dto.validFrom ? new Date(dto.validFrom) : new Date();
+    const validUntil = dto.validUntil ? new Date(dto.validUntil) : null;
+    if (validUntil && validUntil <= validFrom) {
+      throw new BadRequestException('O fim da vigência deve ser posterior ao início');
+    }
+    if (await this.db.billingCoupon.findUnique({ where: { code: dto.code } })) {
+      throw new ConflictException('Já existe um cupom com este código');
+    }
+    const created = await this.db.billingCoupon.create({
+      data: {
+        code: dto.code,
+        description: dto.description?.trim() || null,
+        discountType: dto.discountType,
+        value: dto.value,
+        validFrom,
+        validUntil,
+        maxRedemptions: dto.maxRedemptions,
+      },
+      include: { _count: { select: { redemptions: true } } },
+    });
+    await this.audit(actorId, null, 'COUPON_CREATED', 'BILLING_COUPON', created.id, null, created);
+    return created;
+  }
+
+  async updateCoupon(id: string, dto: UpdateBillingCouponDto, actorId: string) {
+    const coupon = await this.db.billingCoupon.findUnique({ where: { id } });
+    if (!coupon) throw new NotFoundException('Cupom não encontrado');
+    const updated = await this.db.billingCoupon.update({
+      where: { id },
+      data: { active: dto.active },
+      include: { _count: { select: { redemptions: true } } },
+    });
+    await this.audit(actorId, null, 'COUPON_UPDATED', 'BILLING_COUPON', id, coupon, updated);
+    return updated;
+  }
+
   async dashboard() {
-    const [total, active, trial, suspended, subscriptions, users, employees, recent] =
-      await Promise.all([
-        this.db.barbershop.count({ where: { deletedAt: null } }),
-        this.db.barbershop.count({
-          where: { deletedAt: null, status: BarbershopStatus.ACTIVE },
-        }),
-        this.db.barbershop.count({
-          where: { deletedAt: null, status: BarbershopStatus.TRIAL },
-        }),
-        this.db.barbershop.count({
-          where: { deletedAt: null, status: BarbershopStatus.SUSPENDED },
-        }),
-        this.db.subscription.findMany({
-          where: { barbershop: { deletedAt: null }, status: 'ACTIVE' },
-          include: { plan: true },
-        }),
-        this.db.user.count({ where: { barbershopId: { not: null }, active: true } }),
-        this.db.employee.count({ where: { deletedAt: null, active: true } }),
-        this.db.barbershop.findMany({
-          where: { deletedAt: null },
-          take: 5,
-          include: { subscription: { include: { plan: true } } },
-          orderBy: { createdAt: 'desc' },
-        }),
-      ]);
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const nextMonth = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    await this.db.subscriptionInvoice.updateMany({
+      where: { status: InvoiceStatus.PENDING, dueDate: { lt: now } },
+      data: { status: InvoiceStatus.OVERDUE },
+    });
+    const [
+      total,
+      active,
+      trial,
+      suspended,
+      subscriptions,
+      users,
+      employees,
+      recent,
+      paidInvoices,
+      monthlyBilling,
+      cancellations,
+    ] = await Promise.all([
+      this.db.barbershop.count({ where: { deletedAt: null } }),
+      this.db.barbershop.count({
+        where: { deletedAt: null, status: BarbershopStatus.ACTIVE },
+      }),
+      this.db.barbershop.count({
+        where: { deletedAt: null, status: BarbershopStatus.TRIAL },
+      }),
+      this.db.barbershop.count({
+        where: { deletedAt: null, status: BarbershopStatus.SUSPENDED },
+      }),
+      this.db.subscription.findMany({
+        where: { barbershop: { deletedAt: null }, status: 'ACTIVE' },
+        include: { plan: true },
+      }),
+      this.db.user.count({ where: { barbershopId: { not: null }, active: true } }),
+      this.db.employee.count({ where: { deletedAt: null, active: true } }),
+      this.db.barbershop.findMany({
+        where: { deletedAt: null },
+        take: 5,
+        include: { subscription: { include: { plan: true } } },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.db.subscriptionInvoice.aggregate({
+        where: {
+          status: InvoiceStatus.PAID,
+          paidAt: { gte: monthStart, lt: nextMonth },
+        },
+        _sum: { total: true },
+        _avg: { total: true },
+        _count: { _all: true },
+      }),
+      this.db.subscriptionInvoice.groupBy({
+        by: ['status'],
+        where: {
+          status: { in: [InvoiceStatus.PAID, InvoiceStatus.OVERDUE] },
+          dueDate: { gte: monthStart, lt: nextMonth },
+        },
+        _sum: { total: true },
+      }),
+      this.db.subscriptionHistory.findMany({
+        where: {
+          toStatus: SubscriptionStatus.CANCELLED,
+          effectiveAt: { gte: monthStart, lt: nextMonth },
+        },
+        distinct: ['barbershopId'],
+        select: { barbershopId: true },
+      }),
+    ]);
 
     const planDistribution = subscriptions.reduce<Record<string, number>>((summary, item) => {
       summary[item.plan.name] = (summary[item.plan.name] || 0) + 1;
       return summary;
     }, {});
+
+    const mrr = subscriptions.reduce((sum, item) => sum + Number(item.plan.price), 0);
+    const overdueAmount = Number(
+      monthlyBilling.find((item) => item.status === InvoiceStatus.OVERDUE)?._sum.total || 0,
+    );
+    const paidDueAmount = Number(
+      monthlyBilling.find((item) => item.status === InvoiceStatus.PAID)?._sum.total || 0,
+    );
+    const commercialMetrics = calculateCommercialMetrics({
+      mrr,
+      activeSubscriptions: subscriptions.length,
+      cancellations: cancellations.length,
+      paidRevenue: Number(paidInvoices._sum.total || 0),
+      averageTicket: Number(paidInvoices._avg.total || 0),
+      paidInvoices: paidInvoices._count._all,
+      overdueAmount,
+      paidDueAmount,
+    });
 
     return {
       metrics: {
@@ -243,7 +405,7 @@ export class SuperAdminService {
         suspended,
         users,
         employees,
-        mrr: subscriptions.reduce((sum, item) => sum + Number(item.plan.price), 0),
+        ...commercialMetrics,
       },
       planDistribution,
       recent,
@@ -311,6 +473,7 @@ export class SuperAdminService {
         include: {
           barbershop: { select: { id: true, name: true } },
           payments: { orderBy: { paidAt: 'desc' } },
+          couponRedemption: { include: { coupon: true } },
         },
         orderBy: { dueDate: 'desc' },
       }),
@@ -342,22 +505,103 @@ export class SuperAdminService {
     const subscription = await this.db.subscription.findUnique({ where: { barbershopId } });
     if (!subscription) throw new NotFoundException('Assinatura não encontrada');
     const dueDate = new Date(dto.dueDate);
-    const invoice = await this.db.subscriptionInvoice.create({
-      data: {
-        number: `FAT-${new Date().toISOString().slice(0, 7).replace('-', '')}-${randomUUID()
-          .slice(0, 8)
-          .toUpperCase()}`,
-        barbershopId,
-        subscriptionId: subscription.id,
-        amount: dto.amount,
-        discount: dto.discount,
-        total: new Prisma.Decimal(dto.amount).minus(dto.discount),
-        dueDate,
-        status: dueDate < new Date() ? InvoiceStatus.OVERDUE : InvoiceStatus.PENDING,
-        notes: dto.notes?.trim() || null,
+    const invoice = await this.db.$transaction(
+      async (tx) => {
+        const amount = new Prisma.Decimal(dto.amount);
+        const manualDiscount = new Prisma.Decimal(dto.discount);
+        let coupon: any = null;
+        let couponDiscount = new Prisma.Decimal(0);
+
+        if (dto.couponCode) {
+          coupon = await tx.billingCoupon.findUnique({
+            where: { code: dto.couponCode },
+            include: { _count: { select: { redemptions: true } } },
+          });
+          const now = new Date();
+          if (!coupon || !coupon.active) throw new BadRequestException('Cupom inválido ou inativo');
+          if (coupon.validFrom > now || (coupon.validUntil && coupon.validUntil < now)) {
+            throw new BadRequestException('Cupom fora do período de vigência');
+          }
+          if (coupon.maxRedemptions && coupon._count.redemptions >= coupon.maxRedemptions) {
+            throw new BadRequestException('O limite de utilizações deste cupom foi atingido');
+          }
+          const alreadyUsed = await tx.billingCouponRedemption.count({
+            where: { couponId: coupon.id, barbershopId },
+          });
+          if (alreadyUsed) throw new ConflictException('Este cupom já foi usado pela barbearia');
+          couponDiscount =
+            coupon.discountType === CouponDiscountType.PERCENTAGE
+              ? amount.mul(coupon.value).div(100).toDecimalPlaces(2)
+              : Prisma.Decimal.min(amount, coupon.value);
+        }
+
+        const discount = manualDiscount.plus(couponDiscount);
+        if (discount.greaterThan(amount)) {
+          throw new BadRequestException('A soma dos descontos não pode superar o valor da fatura');
+        }
+        const total = amount.minus(discount);
+        const paidAt = total.isZero() ? new Date() : null;
+        const created = await tx.subscriptionInvoice.create({
+          data: {
+            number: `FAT-${new Date().toISOString().slice(0, 7).replace('-', '')}-${randomUUID()
+              .slice(0, 8)
+              .toUpperCase()}`,
+            barbershopId,
+            subscriptionId: subscription.id,
+            amount,
+            discount,
+            total,
+            dueDate,
+            paidAt,
+            status: paidAt
+              ? InvoiceStatus.PAID
+              : dueDate < new Date()
+                ? InvoiceStatus.OVERDUE
+                : InvoiceStatus.PENDING,
+            notes: dto.notes?.trim() || null,
+          },
+        });
+        if (coupon) {
+          await tx.billingCouponRedemption.create({
+            data: {
+              couponId: coupon.id,
+              invoiceId: created.id,
+              barbershopId,
+              actorId,
+              discount: couponDiscount,
+            },
+          });
+        }
+        if (paidAt) {
+          await tx.subscription.update({
+            where: { id: subscription.id },
+            data: { status: SubscriptionStatus.ACTIVE },
+          });
+          await tx.subscriptionHistory.create({
+            data: {
+              subscriptionId: subscription.id,
+              barbershopId,
+              actorId,
+              action: 'COUPON_INVOICE_PAID',
+              fromPlanId: subscription.planId,
+              toPlanId: subscription.planId,
+              fromStatus: subscription.status,
+              toStatus: SubscriptionStatus.ACTIVE,
+              metadata: { couponCode: dto.couponCode },
+            },
+          });
+        }
+        return tx.subscriptionInvoice.findUniqueOrThrow({
+          where: { id: created.id },
+          include: {
+            barbershop: { select: { id: true, name: true } },
+            payments: true,
+            couponRedemption: { include: { coupon: true } },
+          },
+        });
       },
-      include: { barbershop: { select: { id: true, name: true } }, payments: true },
-    });
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
     await this.audit(
       actorId,
       barbershopId,
@@ -680,9 +924,41 @@ export class SuperAdminService {
   async updateBarbershopStatus(id: string, status: BarbershopStatus, actorId: string) {
     const barbershop = await this.db.barbershop.findFirst({
       where: { id, deletedAt: null },
+      include: { subscription: true },
     });
     if (!barbershop) throw new NotFoundException('Barbearia não encontrada');
-    const updated = await this.db.barbershop.update({ where: { id }, data: { status } });
+    const subscriptionStatus: Record<BarbershopStatus, SubscriptionStatus> = {
+      [BarbershopStatus.ACTIVE]: SubscriptionStatus.ACTIVE,
+      [BarbershopStatus.TRIAL]: SubscriptionStatus.TRIAL,
+      [BarbershopStatus.SUSPENDED]: SubscriptionStatus.SUSPENDED,
+      [BarbershopStatus.CANCELLED]: SubscriptionStatus.CANCELLED,
+    };
+    const updated = await this.db.$transaction(async (tx) => {
+      const result = await tx.barbershop.update({ where: { id }, data: { status } });
+      if (
+        barbershop.subscription &&
+        barbershop.subscription.status !== subscriptionStatus[status]
+      ) {
+        await tx.subscription.update({
+          where: { id: barbershop.subscription.id },
+          data: { status: subscriptionStatus[status] },
+        });
+        await tx.subscriptionHistory.create({
+          data: {
+            subscriptionId: barbershop.subscription.id,
+            barbershopId: id,
+            actorId,
+            action: 'BARBERSHOP_STATUS_SYNCED',
+            fromPlanId: barbershop.subscription.planId,
+            toPlanId: barbershop.subscription.planId,
+            fromStatus: barbershop.subscription.status,
+            toStatus: subscriptionStatus[status],
+            metadata: { barbershopStatus: status },
+          },
+        });
+      }
+      return result;
+    });
     await this.audit(
       actorId,
       id,
@@ -704,7 +980,7 @@ export class SuperAdminService {
     return this.db.$transaction(async (tx) => {
       const updated = await tx.subscription.update({
         where: { id: subscription.id },
-        data: { status: SubscriptionStatus.TRIAL, trialEndsAt },
+        data: { status: SubscriptionStatus.TRIAL, trialEndsAt, graceEndsAt: null },
       });
       await tx.subscriptionHistory.create({
         data: {
@@ -730,7 +1006,7 @@ export class SuperAdminService {
     return this.db.$transaction(async (tx) => {
       const updated = await tx.subscription.update({
         where: { id: subscription.id },
-        data: { status: SubscriptionStatus.ACTIVE, trialEndsAt: null },
+        data: { status: SubscriptionStatus.ACTIVE, trialEndsAt: null, graceEndsAt: null },
       });
       await tx.subscriptionHistory.create({
         data: {
@@ -761,7 +1037,12 @@ export class SuperAdminService {
     return this.db.$transaction(async (tx) => {
       const updated = await tx.subscription.update({
         where: { id: subscription.id },
-        data: { status: SubscriptionStatus.ACTIVE, trialEndsAt: null, expiresAt },
+        data: {
+          status: SubscriptionStatus.ACTIVE,
+          trialEndsAt: null,
+          graceEndsAt: null,
+          expiresAt,
+        },
       });
       await tx.subscriptionHistory.create({
         data: {
@@ -774,6 +1055,37 @@ export class SuperAdminService {
           fromStatus: subscription.status,
           toStatus: SubscriptionStatus.ACTIVE,
           metadata: { months, expiresAt: expiresAt.toISOString() },
+        },
+      });
+      return updated;
+    });
+  }
+
+  async configureGracePeriod(id: string, days: number, actorId: string) {
+    await this.assertBarbershopExists(id);
+    const subscription = await this.db.subscription.findUnique({ where: { barbershopId: id } });
+    if (!subscription) throw new NotFoundException('Assinatura não encontrada');
+    const startsAt =
+      subscription.expiresAt && subscription.expiresAt > new Date()
+        ? new Date(subscription.expiresAt)
+        : new Date();
+    const graceEndsAt = days ? new Date(startsAt.getTime() + days * 86400000) : null;
+    return this.db.$transaction(async (tx) => {
+      const updated = await tx.subscription.update({
+        where: { id: subscription.id },
+        data: { graceEndsAt },
+      });
+      await tx.subscriptionHistory.create({
+        data: {
+          subscriptionId: subscription.id,
+          barbershopId: id,
+          actorId,
+          action: days ? 'GRACE_PERIOD_CONFIGURED' : 'GRACE_PERIOD_REMOVED',
+          fromPlanId: subscription.planId,
+          toPlanId: subscription.planId,
+          fromStatus: subscription.status,
+          toStatus: subscription.status,
+          metadata: { days, graceEndsAt: graceEndsAt?.toISOString() || null },
         },
       });
       return updated;
@@ -900,6 +1212,25 @@ export class SuperAdminController {
     return this.service.updatePlan(id, dto, user.sub);
   }
 
+  @Get('coupons')
+  coupons() {
+    return this.service.coupons();
+  }
+
+  @Post('coupons')
+  createCoupon(@Body() dto: CreateBillingCouponDto, @CurrentUser() user: AuthenticatedUser) {
+    return this.service.createCoupon(dto, user.sub);
+  }
+
+  @Patch('coupons/:id')
+  updateCoupon(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: UpdateBillingCouponDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.updateCoupon(id, dto, user.sub);
+  }
+
   @Get('dashboard')
   dashboard() {
     return this.service.dashboard();
@@ -1000,5 +1331,14 @@ export class SuperAdminController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.renewSubscription(id, dto.months, user.sub);
+  }
+
+  @Post('barbershops/:id/subscription/grace-period')
+  configureGracePeriod(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ConfigureGracePeriodDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.configureGracePeriod(id, dto.days, user.sub);
   }
 }

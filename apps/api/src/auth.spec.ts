@@ -107,4 +107,28 @@ describe('AuthService login', () => {
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(db.session.create).not.toHaveBeenCalled();
   });
+
+  it('permite acesso durante o periodo de cortesia', async () => {
+    db.user.findUnique.mockResolvedValue(
+      user({
+        barbershop: {
+          name: 'Barbearia',
+          status: 'ACTIVE',
+          subscription: {
+            status: 'PAST_DUE',
+            expiresAt: new Date(Date.now() - 1000),
+            graceEndsAt: new Date(Date.now() + 86400000),
+          },
+        },
+      }),
+    );
+
+    const result = await service.login(
+      { email: 'admin@example.com', password: 'Valid@123' },
+      request,
+    );
+
+    expect(result.accessToken).toBe('access-token');
+    expect(db.session.create).toHaveBeenCalledTimes(1);
+  });
 });

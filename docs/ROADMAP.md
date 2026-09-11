@@ -99,8 +99,8 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 3.15 Implementar renovação, upgrade e downgrade de plano
 - [x] 3.16 Criar entidades de cobrança, fatura e pagamento da assinatura
 - [x] 3.17 Controlar cobranças pagas, pendentes, vencidas, estornadas e canceladas
-- [ ] 3.18 Implementar cupons, descontos e períodos de cortesia
-- [ ] 3.19 Calcular MRR, ARR, ticket médio, churn e inadimplência
+- [x] 3.18 Implementar cupons, descontos e períodos de cortesia
+- [x] 3.19 Calcular MRR, ARR, ticket médio, churn e inadimplência
 - [ ] 3.20 Criar régua e histórico de tentativas de cobrança
 - [ ] 3.21 Suspender e reativar tenant conforme regras de inadimplência
 - [x] 3.22 Criar tela de pagamentos e faturas no Super Admin
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Continuar a **Etapa 3** pelas renovações, upgrade/downgrade e entidades de cobrança, fatura e pagamento. A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 3** pela régua e pelo histórico de tentativas de cobrança (item 3.20). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
