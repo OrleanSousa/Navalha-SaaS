@@ -159,6 +159,25 @@ export class DataService {
     });
   }
 
+  async setEmployeeStatus(id: string, active: boolean) {
+    const employee = await this.db.employee.findFirst({
+      where: {
+        id,
+        barbershopId: this.tenant.barbershopId,
+        deletedAt: null,
+      },
+      select: { id: true, active: true },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+
+    if (employee.active === active) return employee;
+
+    return this.db.employee.update({
+      where: { id: employee.id },
+      data: { active },
+    });
+  }
+
   services() {
     return this.db.service.findMany({
       where: { barbershopId: this.tenant.barbershopId, deletedAt: null },

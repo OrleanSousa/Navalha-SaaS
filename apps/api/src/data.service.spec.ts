@@ -158,6 +158,32 @@ describe('DataService tenant isolation', () => {
     expect(db.employee.update).not.toHaveBeenCalled();
   });
 
+  it('inativa colaborador do tenant autenticado', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1', active: true });
+    db.employee.update.mockResolvedValue({ id: 'employee-1', active: false });
+
+    const result = await service.setEmployeeStatus('employee-1', false);
+
+    expect(db.employee.findFirst).toHaveBeenCalledWith({
+      where: { id: 'employee-1', barbershopId: 'shop-1', deletedAt: null },
+      select: { id: true, active: true },
+    });
+    expect(db.employee.update).toHaveBeenCalledWith({
+      where: { id: 'employee-1' },
+      data: { active: false },
+    });
+    expect(result.active).toBe(false);
+  });
+
+  it('não altera status de colaborador de outro tenant', async () => {
+    db.employee.findFirst.mockResolvedValue(null);
+
+    await expect(service.setEmployeeStatus('employee-other', false)).rejects.toThrow(
+      'Colaborador não encontrado',
+    );
+    expect(db.employee.update).not.toHaveBeenCalled();
+  });
+
   it('aplica o tenant em todas as consultas do dashboard', async () => {
     await service.dashboard();
 

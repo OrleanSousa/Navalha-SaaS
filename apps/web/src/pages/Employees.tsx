@@ -6,6 +6,8 @@ import {
   Pencil,
   Phone,
   Plus,
+  Power,
+  PowerOff,
   Save,
   Search,
   UserRound,
@@ -70,6 +72,7 @@ export function Employees() {
   const [page, setPage] = useState(1);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string>();
+  const [pendingStatusId, setPendingStatusId] = useState<string>();
   const [form, setForm] = useState(emptyForm);
 
   useEffect(() => setPage(1), [search, status, position]);
@@ -117,6 +120,20 @@ export function Employees() {
       toast.error(error.response?.data?.message || 'Não foi possível salvar o colaborador'),
   });
 
+  const changeStatus = useMutation({
+    mutationFn: ({ id, active }: { id: string; active: boolean }) => {
+      setPendingStatusId(id);
+      return api.patch(`/employees/${id}/status`, { active });
+    },
+    onSuccess: async (_, { active }) => {
+      toast.success(active ? 'Colaborador reativado' : 'Colaborador inativado');
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível alterar o status'),
+    onSettled: () => setPendingStatusId(undefined),
+  });
+
   function closeForm() {
     setShowForm(false);
     setEditingId(undefined);
@@ -141,6 +158,12 @@ export function Employees() {
     });
     setShowForm(true);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function toggleStatus(employee: Employee) {
+    const action = employee.active ? 'inativar' : 'reativar';
+    if (!window.confirm(`Deseja ${action} ${employee.name}?`)) return;
+    changeStatus.mutate({ id: employee.id, active: !employee.active });
   }
 
   return (
@@ -406,16 +429,29 @@ export function Employees() {
                     </span>
                   </td>
                   <td>
-                    {can(Permissions.EMPLOYEES_UPDATE) && (
-                      <button
-                        className="icon"
-                        onClick={() => edit(employee)}
-                        title="Editar colaborador"
-                        aria-label={`Editar ${employee.name}`}
-                      >
-                        <Pencil />
-                      </button>
-                    )}
+                    <div className="employee-row-actions">
+                      {can(Permissions.EMPLOYEES_UPDATE) && (
+                        <button
+                          className="icon"
+                          onClick={() => edit(employee)}
+                          title="Editar colaborador"
+                          aria-label={`Editar ${employee.name}`}
+                        >
+                          <Pencil />
+                        </button>
+                      )}
+                      {can(Permissions.EMPLOYEES_STATUS) && (
+                        <button
+                          className={`icon status-action ${employee.active ? 'deactivate' : 'activate'}`}
+                          onClick={() => toggleStatus(employee)}
+                          disabled={pendingStatusId === employee.id}
+                          title={employee.active ? 'Inativar colaborador' : 'Reativar colaborador'}
+                          aria-label={`${employee.active ? 'Inativar' : 'Reativar'} ${employee.name}`}
+                        >
+                          {employee.active ? <PowerOff /> : <Power />}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}

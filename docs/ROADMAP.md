@@ -113,7 +113,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 4.1 Listar colaboradores com busca, filtro e paginação
 - [x] 4.2 Criar colaborador
 - [x] 4.3 Editar colaborador
-- [ ] 4.4 Inativar e reativar colaborador
+- [x] 4.4 Inativar e reativar colaborador
 - [ ] 4.5 Implementar upload/armazenamento de foto
 - [ ] 4.6 Criar acesso ao sistema associado ao colaborador
 - [ ] 4.7 Editar perfil e permissões individuais
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Continuar a **Etapa 4** pela inativação e reativação de colaboradores (item 4.4). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 4** pelo upload e armazenamento da foto do colaborador (item 4.5). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

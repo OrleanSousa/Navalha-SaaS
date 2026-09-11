@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
 import {
   IsDateString,
+  IsBoolean,
   IsEmail,
   IsEnum,
   IsInt,
@@ -83,4 +84,9 @@ export class UpdateEmployeeDto extends PartialType(CreateEmployeeDto) {
     this.color = undefined;
     this.defaultCommission = undefined;
   }
+}
+
+export class SetEmployeeStatusDto {
+  @IsBoolean()
+  active: boolean;
 }
