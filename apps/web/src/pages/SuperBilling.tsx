@@ -1,10 +1,27 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Plus, RotateCcw, TicketPercent, XCircle } from 'lucide-react';
-import { useState } from 'react';
+import {
+  AlertCircle,
+  CheckCircle2,
+  History,
+  Plus,
+  RotateCcw,
+  TicketPercent,
+  XCircle,
+} from 'lucide-react';
+import { Fragment, useState } from 'react';
 import { toast } from 'sonner';
 import { api, money } from '../lib/api';
 
 type InvoiceStatus = 'PENDING' | 'PAID' | 'OVERDUE' | 'CANCELLED' | 'REFUNDED';
+type BillingAttemptStatus = 'SCHEDULED' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED';
+type BillingAttempt = {
+  id: string;
+  sequence: number;
+  scheduledAt: string;
+  attemptedAt?: string;
+  status: BillingAttemptStatus;
+  notes?: string;
+};
 type Invoice = {
   id: string;
   number: string;
@@ -14,6 +31,7 @@ type Invoice = {
   barbershop: { id: string; name: string };
   payments: Array<{ id: string; amount: string | number; status: string }>;
   couponRedemption?: { discount: string | number; coupon: { code: string } };
+  billingAttempts: BillingAttempt[];
 };
 type BillingResponse = {
   items: Invoice[];
@@ -41,6 +59,13 @@ const statusLabel: Record<InvoiceStatus, string> = {
   REFUNDED: 'Estornada',
 };
 
+const attemptStatusLabel: Record<BillingAttemptStatus, string> = {
+  SCHEDULED: 'Programada',
+  SUCCEEDED: 'Concluída',
+  FAILED: 'Falhou',
+  CANCELLED: 'Cancelada',
+};
+
 function defaultDueDate() {
   const date = new Date();
   date.setDate(date.getDate() + 30);
@@ -57,6 +82,9 @@ export function SuperBilling() {
   const [showForm, setShowForm] = useState(false);
   const [showCouponForm, setShowCouponForm] = useState(false);
   const [status, setStatus] = useState('');
+  const [expandedInvoiceId, setExpandedInvoiceId] = useState<string>();
+  const [failureInvoiceId, setFailureInvoiceId] = useState<string>();
+  const [failureNotes, setFailureNotes] = useState('');
   const [form, setForm] = useState({
     barbershopId: '',
     amount: '',
@@ -158,6 +186,19 @@ export function SuperBilling() {
       api.post(`/super-admin/invoices/${id}/${action}`),
     onSuccess: async (_, variables) => {
       toast.success(variables.action === 'cancel' ? 'Fatura cancelada' : 'Fatura estornada');
+      await refresh();
+    },
+    onError: (error) => toast.error(errorMessage(error)),
+  });
+  const registerFailure = useMutation({
+    mutationFn: () =>
+      api.post(`/super-admin/invoices/${failureInvoiceId}/billing-attempts/failure`, {
+        notes: failureNotes,
+      }),
+    onSuccess: async () => {
+      toast.success('Falha de cobrança registrada');
+      setFailureInvoiceId(undefined);
+      setFailureNotes('');
       await refresh();
     },
     onError: (error) => toast.error(errorMessage(error)),
@@ -419,58 +460,136 @@ export function SuperBilling() {
               <th>Vencimento</th>
               <th>Total</th>
               <th>Status</th>
+              <th>Régua</th>
               <th>Ações</th>
             </tr>
           </thead>
           <tbody>
             {data?.items.map((invoice) => (
-              <tr key={invoice.id}>
-                <td>
-                  <b>{invoice.number}</b>
-                  {invoice.couponRedemption && (
-                    <small className="invoice-coupon">
-                      Cupom {invoice.couponRedemption.coupon.code}
-                    </small>
-                  )}
-                </td>
-                <td>{invoice.barbershop.name}</td>
-                <td>{new Date(invoice.dueDate).toLocaleDateString('pt-BR')}</td>
-                <td>{money(Number(invoice.total))}</td>
-                <td>
-                  <span className={`billing-status ${invoice.status.toLowerCase()}`}>
-                    {statusLabel[invoice.status]}
-                  </span>
-                </td>
-                <td className="billing-actions">
-                  {(invoice.status === 'PENDING' || invoice.status === 'OVERDUE') && (
-                    <>
+              <Fragment key={invoice.id}>
+                <tr>
+                  <td>
+                    <b>{invoice.number}</b>
+                    {invoice.couponRedemption && (
+                      <small className="invoice-coupon">
+                        Cupom {invoice.couponRedemption.coupon.code}
+                      </small>
+                    )}
+                  </td>
+                  <td>{invoice.barbershop.name}</td>
+                  <td>{new Date(invoice.dueDate).toLocaleDateString('pt-BR')}</td>
+                  <td>{money(Number(invoice.total))}</td>
+                  <td>
+                    <span className={`billing-status ${invoice.status.toLowerCase()}`}>
+                      {statusLabel[invoice.status]}
+                    </span>
+                  </td>
+                  <td>
+                    <button
+                      className="link billing-history-button"
+                      onClick={() =>
+                        setExpandedInvoiceId((current) =>
+                          current === invoice.id ? undefined : invoice.id,
+                        )
+                      }
+                    >
+                      <History /> {invoice.billingAttempts.length} etapas
+                    </button>
+                  </td>
+                  <td className="billing-actions">
+                    {(invoice.status === 'PENDING' || invoice.status === 'OVERDUE') && (
+                      <>
+                        <button
+                          className="outline"
+                          title="Registrar o saldo restante como PIX"
+                          onClick={() =>
+                            payInvoice.mutate({ id: invoice.id, amount: remaining(invoice) })
+                          }
+                        >
+                          <CheckCircle2 /> Baixar via PIX
+                        </button>
+                        <button
+                          className="outline"
+                          onClick={() => {
+                            setExpandedInvoiceId(invoice.id);
+                            setFailureInvoiceId(invoice.id);
+                          }}
+                        >
+                          <AlertCircle /> Registrar falha
+                        </button>
+                        <button
+                          className="outline danger"
+                          onClick={() => changeInvoice.mutate({ id: invoice.id, action: 'cancel' })}
+                        >
+                          <XCircle /> Cancelar
+                        </button>
+                      </>
+                    )}
+                    {invoice.status === 'PAID' && (
                       <button
                         className="outline"
-                        title="Registrar o saldo restante como PIX"
-                        onClick={() =>
-                          payInvoice.mutate({ id: invoice.id, amount: remaining(invoice) })
-                        }
+                        onClick={() => changeInvoice.mutate({ id: invoice.id, action: 'refund' })}
                       >
-                        <CheckCircle2 /> Baixar via PIX
+                        <RotateCcw /> Estornar
                       </button>
-                      <button
-                        className="outline danger"
-                        onClick={() => changeInvoice.mutate({ id: invoice.id, action: 'cancel' })}
-                      >
-                        <XCircle /> Cancelar
-                      </button>
-                    </>
-                  )}
-                  {invoice.status === 'PAID' && (
-                    <button
-                      className="outline"
-                      onClick={() => changeInvoice.mutate({ id: invoice.id, action: 'refund' })}
-                    >
-                      <RotateCcw /> Estornar
-                    </button>
-                  )}
-                </td>
-              </tr>
+                    )}
+                  </td>
+                </tr>
+                {expandedInvoiceId === invoice.id && (
+                  <tr className="billing-attempt-detail">
+                    <td colSpan={7}>
+                      <div className="billing-attempts">
+                        {invoice.billingAttempts.map((attempt) => (
+                          <div
+                            className={`billing-attempt ${attempt.status.toLowerCase()}`}
+                            key={attempt.id}
+                          >
+                            <span>{attempt.sequence}</span>
+                            <div>
+                              <b>{attemptStatusLabel[attempt.status]}</b>
+                              <small>
+                                {new Date(
+                                  attempt.attemptedAt || attempt.scheduledAt,
+                                ).toLocaleString('pt-BR')}
+                              </small>
+                              {attempt.notes && <em>{attempt.notes}</em>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      {failureInvoiceId === invoice.id && (
+                        <form
+                          className="billing-failure-form"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            registerFailure.mutate();
+                          }}
+                        >
+                          <label>
+                            Motivo da falha
+                            <input
+                              required
+                              minLength={2}
+                              value={failureNotes}
+                              onChange={(event) => setFailureNotes(event.target.value)}
+                            />
+                          </label>
+                          <button
+                            type="button"
+                            className="outline"
+                            onClick={() => setFailureInvoiceId(undefined)}
+                          >
+                            Cancelar
+                          </button>
+                          <button className="primary" disabled={registerFailure.isPending}>
+                            Registrar
+                          </button>
+                        </form>
+                      )}
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
             ))}
           </tbody>
         </table>

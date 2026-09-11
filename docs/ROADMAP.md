@@ -101,7 +101,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 3.17 Controlar cobranças pagas, pendentes, vencidas, estornadas e canceladas
 - [x] 3.18 Implementar cupons, descontos e períodos de cortesia
 - [x] 3.19 Calcular MRR, ARR, ticket médio, churn e inadimplência
-- [ ] 3.20 Criar régua e histórico de tentativas de cobrança
+- [x] 3.20 Criar régua e histórico de tentativas de cobrança
 - [ ] 3.21 Suspender e reativar tenant conforme regras de inadimplência
 - [x] 3.22 Criar tela de pagamentos e faturas no Super Admin
 - [ ] 3.23 Criar visão financeira consolidada do SaaS
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Continuar a **Etapa 3** pela régua e pelo histórico de tentativas de cobrança (item 3.20). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 3** pela suspensão e reativação automática de tenants conforme as regras de inadimplência (item 3.21). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

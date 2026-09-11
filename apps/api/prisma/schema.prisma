@@ -98,6 +98,13 @@ enum CouponDiscountType {
   FIXED
 }
 
+enum BillingAttemptStatus {
+  SCHEDULED
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
 model Plan {
   id            String         @id @default(uuid())
   name          String         @unique
@@ -146,28 +153,49 @@ model SubscriptionHistory {
 }
 
 model SubscriptionInvoice {
-  id             String                @id @default(uuid())
-  number         String                @unique
-  barbershopId   String
-  subscriptionId String
-  amount         Decimal               @db.Decimal(10, 2)
-  discount       Decimal               @default(0) @db.Decimal(10, 2)
-  total          Decimal               @db.Decimal(10, 2)
-  dueDate        DateTime
-  paidAt         DateTime?
-  status         InvoiceStatus         @default(PENDING)
-  notes          String?
-  externalId     String?
-  subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  barbershop     Barbershop            @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
-  payments       SubscriptionPayment[]
+  id               String                       @id @default(uuid())
+  number           String                       @unique
+  barbershopId     String
+  subscriptionId   String
+  amount           Decimal                      @db.Decimal(10, 2)
+  discount         Decimal                      @default(0) @db.Decimal(10, 2)
+  total            Decimal                      @db.Decimal(10, 2)
+  dueDate          DateTime
+  paidAt           DateTime?
+  status           InvoiceStatus                @default(PENDING)
+  notes            String?
+  externalId       String?
+  subscription     Subscription                 @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  barbershop       Barbershop                   @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  payments         SubscriptionPayment[]
   couponRedemption BillingCouponRedemption?
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  billingAttempts  SubscriptionBillingAttempt[]
+  createdAt        DateTime                     @default(now())
+  updatedAt        DateTime                     @updatedAt
 
   @@index([barbershopId, dueDate])
   @@index([status, dueDate])
   @@index([subscriptionId])
+}
+
+model SubscriptionBillingAttempt {
+  id                String                @id @default(uuid())
+  invoiceId         String
+  actorId           String?
+  sequence          Int
+  scheduledAt       DateTime
+  attemptedAt       DateTime?
+  status            BillingAttemptStatus  @default(SCHEDULED)
+  method            BillingPaymentMethod?
+  externalReference String?
+  notes             String?
+  invoice           SubscriptionInvoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+
+  @@unique([invoiceId, sequence])
+  @@index([status, scheduledAt])
+  @@index([invoiceId, scheduledAt])
 }
 
 model BillingCoupon {
@@ -222,10 +250,10 @@ model SubscriptionPayment {
 }
 
 model Barbershop {
-  id                    String                 @id @default(uuid())
+  id                    String                    @id @default(uuid())
   name                  String
   tradeName             String?
-  slug                  String                 @unique
+  slug                  String                    @unique
   document              String?
   ownerName             String
   phone                 String?
@@ -236,8 +264,8 @@ model Barbershop {
   state                 String?
   zipCode               String?
   logoUrl               String?
-  primaryColor          String                 @default("#B8832B")
-  status                BarbershopStatus       @default(TRIAL)
+  primaryColor          String                    @default("#B8832B")
+  status                BarbershopStatus          @default(TRIAL)
   users                 User[]
   employees             Employee[]
   customers             Customer[]
@@ -254,8 +282,8 @@ model Barbershop {
   couponRedemptions     BillingCouponRedemption[]
   subscription          Subscription?
   settings              Setting?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
   deletedAt             DateTime?
 }
 

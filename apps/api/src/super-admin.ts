@@ -16,6 +16,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import {
   BarbershopStatus,
+  BillingAttemptStatus,
   BillingPaymentMethod,
   CouponDiscountType,
   InvoiceStatus,
@@ -49,6 +50,14 @@ import { AllowSuperAdmin, PermissionsGuard, Roles, RolesGuard } from './rbac';
 
 const STRONG_PASSWORD = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).+$/;
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const DUNNING_OFFSETS_DAYS = [-3, 0, 3, 7] as const;
+
+export function buildDunningSchedule(dueDate: Date) {
+  return DUNNING_OFFSETS_DAYS.map((offset, index) => ({
+    sequence: index + 1,
+    scheduledAt: new Date(dueDate.getTime() + offset * 86400000),
+  }));
+}
 
 export function calculateCommercialMetrics(input: {
   mrr: number;
@@ -206,6 +215,12 @@ export class RegisterInvoicePaymentDto {
   @IsOptional() @IsDateString() paidAt?: string;
   @IsOptional() @IsString() externalReference?: string;
   @IsOptional() @IsString() notes?: string;
+}
+
+export class RegisterBillingFailureDto {
+  @IsOptional() @IsDateString() attemptedAt?: string;
+  @IsOptional() @IsString() externalReference?: string;
+  @IsString() @MinLength(2) notes: string;
 }
 
 @Injectable()
@@ -474,6 +489,7 @@ export class SuperAdminService {
           barbershop: { select: { id: true, name: true } },
           payments: { orderBy: { paidAt: 'desc' } },
           couponRedemption: { include: { coupon: true } },
+          billingAttempts: { orderBy: { sequence: 'asc' } },
         },
         orderBy: { dueDate: 'desc' },
       }),
@@ -591,12 +607,21 @@ export class SuperAdminService {
             },
           });
         }
+        if (!paidAt) {
+          await tx.subscriptionBillingAttempt.createMany({
+            data: buildDunningSchedule(dueDate).map((attempt) => ({
+              invoiceId: created.id,
+              ...attempt,
+            })),
+          });
+        }
         return tx.subscriptionInvoice.findUniqueOrThrow({
           where: { id: created.id },
           include: {
             barbershop: { select: { id: true, name: true } },
             payments: true,
             couponRedemption: { include: { coupon: true } },
+            billingAttempts: { orderBy: { sequence: 'asc' } },
           },
         });
       },
@@ -649,12 +674,37 @@ export class SuperAdminService {
           notes: dto.notes?.trim() || null,
         },
       });
+      const scheduledAttempt = await tx.subscriptionBillingAttempt.findFirst({
+        where: { invoiceId: id, status: BillingAttemptStatus.SCHEDULED },
+        orderBy: { sequence: 'asc' },
+      });
+      if (scheduledAttempt) {
+        await tx.subscriptionBillingAttempt.update({
+          where: { id: scheduledAttempt.id },
+          data: {
+            status: BillingAttemptStatus.SUCCEEDED,
+            attemptedAt: paidAt,
+            method: dto.method,
+            externalReference: dto.externalReference?.trim() || null,
+            notes: dto.notes?.trim() || null,
+            actorId,
+          },
+        });
+      }
       const result = await tx.subscriptionInvoice.update({
         where: { id },
         data: isPaid ? { status: InvoiceStatus.PAID, paidAt } : {},
-        include: { barbershop: { select: { id: true, name: true } }, payments: true },
+        include: {
+          barbershop: { select: { id: true, name: true } },
+          payments: true,
+          billingAttempts: { orderBy: { sequence: 'asc' } },
+        },
       });
       if (isPaid) {
+        await tx.subscriptionBillingAttempt.updateMany({
+          where: { invoiceId: id, status: BillingAttemptStatus.SCHEDULED },
+          data: { status: BillingAttemptStatus.CANCELLED },
+        });
         await tx.subscription.update({
           where: { id: invoice.subscriptionId },
           data: { status: SubscriptionStatus.ACTIVE },
@@ -693,9 +743,16 @@ export class SuperAdminService {
     if (invoice.status === InvoiceStatus.PAID || invoice.status === InvoiceStatus.REFUNDED) {
       throw new BadRequestException('Uma fatura paga deve ser estornada, não cancelada');
     }
-    const updated = await this.db.subscriptionInvoice.update({
-      where: { id },
-      data: { status: InvoiceStatus.CANCELLED },
+    const updated = await this.db.$transaction(async (tx) => {
+      await tx.subscriptionBillingAttempt.updateMany({
+        where: { invoiceId: id, status: BillingAttemptStatus.SCHEDULED },
+        data: { status: BillingAttemptStatus.CANCELLED },
+      });
+      return tx.subscriptionInvoice.update({
+        where: { id },
+        data: { status: InvoiceStatus.CANCELLED },
+        include: { billingAttempts: { orderBy: { sequence: 'asc' } } },
+      });
     });
     await this.audit(
       actorId,
@@ -707,6 +764,72 @@ export class SuperAdminService {
       updated,
     );
     return updated;
+  }
+
+  async billingAttempts(invoiceId: string) {
+    const invoice = await this.db.subscriptionInvoice.findUnique({
+      where: { id: invoiceId },
+      select: { id: true },
+    });
+    if (!invoice) throw new NotFoundException('Fatura não encontrada');
+    return this.db.subscriptionBillingAttempt.findMany({
+      where: { invoiceId },
+      orderBy: { sequence: 'asc' },
+    });
+  }
+
+  async registerBillingFailure(invoiceId: string, dto: RegisterBillingFailureDto, actorId: string) {
+    const invoice = await this.db.subscriptionInvoice.findUnique({ where: { id: invoiceId } });
+    if (!invoice) throw new NotFoundException('Fatura não encontrada');
+    if (
+      invoice.status === InvoiceStatus.PAID ||
+      invoice.status === InvoiceStatus.CANCELLED ||
+      invoice.status === InvoiceStatus.REFUNDED
+    ) {
+      throw new BadRequestException('Esta fatura não aceita novas tentativas de cobrança');
+    }
+    const attemptedAt = dto.attemptedAt ? new Date(dto.attemptedAt) : new Date();
+    const attempt = await this.db.$transaction(async (tx) => {
+      const scheduled = await tx.subscriptionBillingAttempt.findFirst({
+        where: { invoiceId, status: BillingAttemptStatus.SCHEDULED },
+        orderBy: { sequence: 'asc' },
+      });
+      if (scheduled) {
+        return tx.subscriptionBillingAttempt.update({
+          where: { id: scheduled.id },
+          data: {
+            status: BillingAttemptStatus.FAILED,
+            attemptedAt,
+            actorId,
+            externalReference: dto.externalReference?.trim() || null,
+            notes: dto.notes.trim(),
+          },
+        });
+      }
+      const sequence = (await tx.subscriptionBillingAttempt.count({ where: { invoiceId } })) + 1;
+      return tx.subscriptionBillingAttempt.create({
+        data: {
+          invoiceId,
+          actorId,
+          sequence,
+          scheduledAt: attemptedAt,
+          attemptedAt,
+          status: BillingAttemptStatus.FAILED,
+          externalReference: dto.externalReference?.trim() || null,
+          notes: dto.notes.trim(),
+        },
+      });
+    });
+    await this.audit(
+      actorId,
+      invoice.barbershopId,
+      'BILLING_ATTEMPT_FAILED',
+      'SUBSCRIPTION_BILLING_ATTEMPT',
+      attempt.id,
+      null,
+      attempt,
+    );
+    return attempt;
   }
 
   async refundInvoice(id: string, actorId: string) {
@@ -1257,6 +1380,20 @@ export class SuperAdminController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.service.registerInvoicePayment(id, dto, user.sub);
+  }
+
+  @Get('invoices/:id/billing-attempts')
+  billingAttempts(@Param('id', ParseUUIDPipe) id: string) {
+    return this.service.billingAttempts(id);
+  }
+
+  @Post('invoices/:id/billing-attempts/failure')
+  registerBillingFailure(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: RegisterBillingFailureDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.service.registerBillingFailure(id, dto, user.sub);
   }
 
   @Post('invoices/:id/cancel')

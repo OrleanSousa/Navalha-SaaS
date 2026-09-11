@@ -1,8 +1,24 @@
 import { BadRequestException } from '@nestjs/common';
 import { BarbershopStatus, CouponDiscountType, Prisma, SubscriptionStatus } from '@prisma/client';
-import { calculateCommercialMetrics, DocumentType, SuperAdminService } from './super-admin';
+import {
+  buildDunningSchedule,
+  calculateCommercialMetrics,
+  DocumentType,
+  SuperAdminService,
+} from './super-admin';
 
 describe('SuperAdminService', () => {
+  it('monta a régua de cobrança em D-3, D0, D+3 e D+7', () => {
+    const dueDate = new Date('2026-10-10T12:00:00.000Z');
+
+    expect(buildDunningSchedule(dueDate)).toEqual([
+      { sequence: 1, scheduledAt: new Date('2026-10-07T12:00:00.000Z') },
+      { sequence: 2, scheduledAt: new Date('2026-10-10T12:00:00.000Z') },
+      { sequence: 3, scheduledAt: new Date('2026-10-13T12:00:00.000Z') },
+      { sequence: 4, scheduledAt: new Date('2026-10-17T12:00:00.000Z') },
+    ]);
+  });
+
   it('calcula ARR, churn e inadimplencia comercial', () => {
     expect(
       calculateCommercialMetrics({
@@ -131,6 +147,7 @@ describe('SuperAdminService', () => {
         create: jest.fn().mockResolvedValue({ id: 'invoice-1' }),
         findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'invoice-1' }),
       },
+      subscriptionBillingAttempt: { createMany: jest.fn().mockResolvedValue({ count: 4 }) },
       subscription: { update: jest.fn() },
       subscriptionHistory: { create: jest.fn() },
     };
@@ -161,6 +178,48 @@ describe('SuperAdminService', () => {
     });
     expect(tx.billingCouponRedemption.create).toHaveBeenCalledWith({
       data: expect.objectContaining({ discount: new Prisma.Decimal(10) }),
+    });
+    expect(tx.subscriptionBillingAttempt.createMany).toHaveBeenCalledWith({
+      data: expect.arrayContaining([
+        expect.objectContaining({ invoiceId: 'invoice-1', sequence: 1 }),
+        expect.objectContaining({ invoiceId: 'invoice-1', sequence: 4 }),
+      ]),
+    });
+  });
+
+  it('registra falha na próxima tentativa programada', async () => {
+    const tx = {
+      subscriptionBillingAttempt: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'attempt-1' }),
+        update: jest.fn().mockResolvedValue({ id: 'attempt-1', status: 'FAILED' }),
+      },
+    };
+    const db = {
+      subscriptionInvoice: {
+        findUnique: jest.fn().mockResolvedValue({
+          id: 'invoice-1',
+          status: 'OVERDUE',
+          barbershopId: 'shop-1',
+        }),
+      },
+      $transaction: jest.fn((callback) => callback(tx)),
+      auditLog: { create: jest.fn().mockResolvedValue({}) },
+    };
+    const service = new SuperAdminService(db as any);
+
+    await service.registerBillingFailure(
+      'invoice-1',
+      { notes: 'Cartão recusado', attemptedAt: '2026-10-10T12:00:00.000Z' },
+      'actor-1',
+    );
+
+    expect(tx.subscriptionBillingAttempt.update).toHaveBeenCalledWith({
+      where: { id: 'attempt-1' },
+      data: expect.objectContaining({
+        status: 'FAILED',
+        notes: 'Cartão recusado',
+        actorId: 'actor-1',
+      }),
     });
   });
 
