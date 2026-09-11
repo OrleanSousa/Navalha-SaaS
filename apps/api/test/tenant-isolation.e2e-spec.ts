@@ -23,10 +23,13 @@ describe('Isolamento multi-tenant (e2e)', () => {
   let shopBId: string;
   let userAId: string;
   let userBId: string;
+  let receptionistAId: string;
   let superAdminId: string;
   let createdShopId: string | undefined;
   let createdAdminId: string | undefined;
   let createdPlanId: string | undefined;
+  let employeeAId: string;
+  let employeeBId: string;
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const password = 'Test@1234';
 
@@ -85,7 +88,16 @@ describe('Isolamento multi-tenant (e2e)', () => {
     shopBId = shopB.id;
 
     const passwordHash = await bcrypt.hash(password, 4);
-    const [userA, userB, superAdmin] = await Promise.all([
+    const [userA, userB, receptionistA, superAdmin] = await Promise.all([
+      db.user.create({
+        data: {
+          barbershopId: shopAId,
+          email: `receptionist-a-${suffix}@example.com`,
+          passwordHash,
+          name: 'Recepcionista A',
+          role: Role.RECEPTIONIST,
+        },
+      }),
       db.user.create({
         data: {
           barbershopId: shopAId,
@@ -115,6 +127,7 @@ describe('Isolamento multi-tenant (e2e)', () => {
     ]);
     userAId = userA.id;
     userBId = userB.id;
+    receptionistAId = receptionistA.id;
     superAdminId = superAdmin.id;
 
     await Promise.all([
@@ -124,12 +137,18 @@ describe('Isolamento multi-tenant (e2e)', () => {
       db.customer.create({
         data: { barbershopId: shopBId, name: `Cliente B ${suffix}`, phone: '11922222222' },
       }),
+      db.employee
+        .create({ data: { barbershopId: shopAId, name: `Colaborador A ${suffix}` } })
+        .then((employee) => (employeeAId = employee.id)),
+      db.employee
+        .create({ data: { barbershopId: shopBId, name: `Colaborador B ${suffix}` } })
+        .then((employee) => (employeeBId = employee.id)),
     ]);
   });
 
   afterAll(async () => {
-    const userIds = [userAId, userBId, superAdminId, createdAdminId].filter((id): id is string =>
-      Boolean(id),
+    const userIds = [userAId, userBId, receptionistAId, superAdminId, createdAdminId].filter(
+      (id): id is string => Boolean(id),
     );
     const shopIds = [shopAId, shopBId, createdShopId].filter((id): id is string => Boolean(id));
     if (userIds.length) {
@@ -138,6 +157,7 @@ describe('Isolamento multi-tenant (e2e)', () => {
       await db.user.deleteMany({ where: { id: { in: userIds } } });
     }
     if (shopIds.length) {
+      await db.employee.deleteMany({ where: { barbershopId: { in: shopIds } } });
       await db.customer.deleteMany({ where: { barbershopId: { in: shopIds } } });
       await db.subscription.deleteMany({ where: { barbershopId: { in: shopIds } } });
       await db.barbershop.deleteMany({ where: { id: { in: shopIds } } });
@@ -185,6 +205,75 @@ describe('Isolamento multi-tenant (e2e)', () => {
     await request(app.getHttpServer())
       .get('/api/dashboard')
       .set('Authorization', `Bearer ${token}`)
+      .expect(403);
+  });
+
+  it('isola listagem e detalhes de colaboradores entre tenants', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    const tokenB = await login(`admin-b-${suffix}@example.com`);
+
+    const [listA, listB] = await Promise.all([
+      request(app.getHttpServer())
+        .get('/api/employees')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200),
+      request(app.getHttpServer())
+        .get('/api/employees')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(200),
+    ]);
+    expect(listA.body.items.map((employee: { id: string }) => employee.id)).toContain(employeeAId);
+    expect(listA.body.items.map((employee: { id: string }) => employee.id)).not.toContain(
+      employeeBId,
+    );
+    expect(listB.body.items.map((employee: { id: string }) => employee.id)).toContain(employeeBId);
+
+    await request(app.getHttpServer())
+      .get(`/api/employees/${employeeBId}`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .expect(404);
+  });
+
+  it('bloqueia mutações de colaborador pertencente a outro tenant', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+
+    await request(app.getHttpServer())
+      .patch(`/api/employees/${employeeBId}/status`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ active: false })
+      .expect(404);
+    await request(app.getHttpServer())
+      .patch(`/api/employees/${employeeBId}/commission`)
+      .set('Authorization', `Bearer ${tokenA}`)
+      .send({ defaultCommission: 25 })
+      .expect(404);
+
+    const untouched = await db.employee.findUniqueOrThrow({ where: { id: employeeBId } });
+    expect(untouched.active).toBe(true);
+    expect(Number(untouched.defaultCommission)).toBe(0);
+  });
+
+  it('permite consulta e nega administração ao recepcionista', async () => {
+    const token = await login(`receptionist-a-${suffix}@example.com`);
+
+    await request(app.getHttpServer())
+      .get('/api/employees')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post('/api/employees')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Sem permissão' })
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/employees/${employeeAId}/status`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ active: false })
+      .expect(403);
+    await request(app.getHttpServer())
+      .patch(`/api/employees/${employeeAId}/commission`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ defaultCommission: 25 })
       .expect(403);
   });
 

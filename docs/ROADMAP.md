@@ -119,7 +119,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 4.7 Editar perfil e permissões individuais
 - [x] 4.8 Configurar comissão padrão
 - [x] 4.9 Criar tela de detalhes do colaborador
-- [ ] 4.10 Testar isolamento e permissões do módulo
+- [x] 4.10 Testar isolamento e permissões do módulo
 
 ## Etapa 5 — Jornadas e indisponibilidades
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Concluir a **Etapa 4** com os testes de isolamento e permissões do módulo (item 4.10). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Iniciar a **Etapa 5** pelo CRUD de jornada semanal por colaborador (item 5.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
