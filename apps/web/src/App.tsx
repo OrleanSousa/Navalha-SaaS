@@ -7,6 +7,7 @@ import { Customers } from './pages/Customers';
 import { Catalog } from './pages/Catalog';
 import { Finance } from './pages/Finance';
 import { Employees } from './pages/Employees';
+import { EmployeeDetails } from './pages/EmployeeDetails';
 import { Placeholder } from './pages/Placeholder';
 import { useAuth } from './lib/auth';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="produtos" element={<Catalog type="products" />} />
         <Route path="financeiro" element={<Finance />} />
         <Route path="colaboradores" element={<Employees />} />
+        <Route path="colaboradores/:id" element={<EmployeeDetails />} />
         <Route path=":page" element={<Placeholder />} />
       </Route>
     </Routes>

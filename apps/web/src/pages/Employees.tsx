@@ -18,6 +18,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api, assetUrl } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -773,7 +774,9 @@ export function Employees() {
                         </span>
                       )}
                       <div>
-                        <b>{employee.name}</b>
+                        <Link className="employee-detail-link" to={`/colaboradores/${employee.id}`}>
+                          {employee.name}
+                        </Link>
                         <small>{employee.position || 'Cargo não informado'}</small>
                       </div>
                     </div>

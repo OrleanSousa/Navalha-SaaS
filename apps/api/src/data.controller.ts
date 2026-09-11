@@ -45,6 +45,12 @@ export class DataController {
     return this.data.employees(query);
   }
 
+  @Get('employees/:id')
+  @RequirePermissions(Permissions.EMPLOYEES_READ)
+  employeeDetails(@Param('id') id: string) {
+    return this.data.employeeDetails(id);
+  }
+
   @Post('employees')
   @RequirePermissions(Permissions.EMPLOYEES_CREATE)
   createEmployee(@Body() dto: CreateEmployeeDto) {

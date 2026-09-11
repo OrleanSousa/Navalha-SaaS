@@ -41,7 +41,9 @@ export function Shell() {
   const { user, logout, can } = useAuth();
   const [open, setOpen] = useState(false);
   const loc = useLocation();
-  const title = items.find((x) => x[0] === loc.pathname)?.[1] || 'Navalha';
+  const title =
+    items.find((x) => x[0] === loc.pathname)?.[1] ||
+    (loc.pathname.startsWith('/colaboradores/') ? 'Colaborador' : 'Navalha');
   return (
     <div className="app">
       <aside className={open ? 'sidebar open' : 'sidebar'}>

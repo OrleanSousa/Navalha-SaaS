@@ -47,6 +47,9 @@ describe('DataService tenant isolation', () => {
       sale: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: null }, _avg: { total: null } }),
       },
+      commission: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
+      },
       cashRegister: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     db.$transaction = jest.fn((callback) => callback(db));
@@ -112,6 +115,51 @@ describe('DataService tenant isolation', () => {
       expect.objectContaining({ items: [{ id: 'employee-1', name: 'Ana' }], total: 1, pages: 1 }),
     );
     expect(result.positions).toEqual(['Barbeiro']);
+  });
+
+  it('carrega detalhes e indicadores do colaborador sem sair do tenant', async () => {
+    db.employee.findFirst.mockResolvedValue({
+      id: 'employee-1',
+      name: 'Maria',
+      schedules: [],
+      employeeServices: [],
+    });
+    db.appointment.findMany.mockResolvedValue([]);
+    db.appointment.count.mockResolvedValueOnce(4).mockResolvedValueOnce(3);
+    db.sale.aggregate.mockResolvedValue({ _sum: { total: 250 }, _count: { _all: 2 } });
+    db.commission.aggregate.mockResolvedValue({ _sum: { amount: 75 } });
+
+    const result = await service.employeeDetails('employee-1');
+
+    expect(db.employee.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'employee-1', barbershopId: 'shop-1', deletedAt: null },
+      }),
+    );
+    for (const [query] of [
+      ...db.appointment.findMany.mock.calls,
+      ...db.appointment.count.mock.calls,
+      ...db.sale.aggregate.mock.calls,
+      ...db.commission.aggregate.mock.calls,
+    ]) {
+      expect(query.where).toEqual(expect.objectContaining({ barbershopId: 'shop-1' }));
+    }
+    expect(result.metrics).toEqual({
+      appointments: 4,
+      completedAppointments: 3,
+      sales: 2,
+      revenue: 250,
+      commissions: 75,
+    });
+  });
+
+  it('não revela detalhes de colaborador de outro tenant', async () => {
+    db.employee.findFirst.mockResolvedValue(null);
+
+    await expect(service.employeeDetails('employee-other')).rejects.toThrow(
+      'Colaborador não encontrado',
+    );
+    expect(db.appointment.findMany).not.toHaveBeenCalled();
   });
 
   it('cadastra colaborador no tenant autenticado', async () => {

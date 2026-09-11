@@ -90,6 +90,64 @@ export class DataService {
     };
   }
 
+  async employeeDetails(id: string) {
+    const barbershopId = this.tenant.barbershopId;
+    const employee = await this.db.employee.findFirst({
+      where: { id, barbershopId, deletedAt: null },
+      include: {
+        user: { select: { id: true, email: true, role: true, active: true } },
+        schedules: { orderBy: [{ weekday: 'asc' }, { startTime: 'asc' }] },
+        employeeServices: {
+          include: {
+            service: {
+              select: { id: true, name: true, price: true, durationMinutes: true, active: true },
+            },
+          },
+          orderBy: { service: { name: 'asc' } },
+        },
+      },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+
+    const [appointments, totalAppointments, completedAppointments, sales, commissions] =
+      await Promise.all([
+        this.db.appointment.findMany({
+          where: { barbershopId, employeeId: employee.id },
+          include: {
+            customer: { select: { id: true, name: true } },
+            services: { include: { service: { select: { id: true, name: true } } } },
+          },
+          orderBy: { startAt: 'desc' },
+          take: 10,
+        }),
+        this.db.appointment.count({ where: { barbershopId, employeeId: employee.id } }),
+        this.db.appointment.count({
+          where: { barbershopId, employeeId: employee.id, status: 'COMPLETED' },
+        }),
+        this.db.sale.aggregate({
+          where: { barbershopId, employeeId: employee.id },
+          _sum: { total: true },
+          _count: { _all: true },
+        }),
+        this.db.commission.aggregate({
+          where: { barbershopId, employeeId: employee.id },
+          _sum: { amount: true },
+        }),
+      ]);
+
+    return {
+      employee,
+      metrics: {
+        appointments: totalAppointments,
+        completedAppointments,
+        sales: sales._count._all,
+        revenue: Number(sales._sum.total || 0),
+        commissions: Number(commissions._sum.amount || 0),
+      },
+      appointments,
+    };
+  }
+
   async createEmployee(dto: CreateEmployeeDto) {
     const barbershopId = this.tenant.barbershopId;
     const cpf = dto.cpf?.trim() || null;
