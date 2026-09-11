@@ -104,7 +104,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 3.20 Criar régua e histórico de tentativas de cobrança
 - [x] 3.21 Suspender e reativar tenant conforme regras de inadimplência
 - [x] 3.22 Criar tela de pagamentos e faturas no Super Admin
-- [ ] 3.23 Criar visão financeira consolidada do SaaS
+- [x] 3.23 Criar visão financeira consolidada do SaaS
 - [ ] 3.24 Criar interface para integração futura com gateway de pagamento
 - [ ] 3.25 Criar relatórios comerciais por período, plano e status
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Continuar a **Etapa 3** pela visão financeira consolidada do SaaS (item 3.23; o item 3.22 já está concluído). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 3** pela interface para integração futura com gateway de pagamento (item 3.24). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

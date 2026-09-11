@@ -18,6 +18,7 @@ import {
   BarbershopStatus,
   BillingAttemptStatus,
   BillingPaymentMethod,
+  BillingPaymentStatus,
   CouponDiscountType,
   InvoiceStatus,
   Prisma,
@@ -83,6 +84,66 @@ export function calculateCommercialMetrics(input: {
     delinquencyRate: billedAmount
       ? Number(((input.overdueAmount / billedAmount) * 100).toFixed(2))
       : 0,
+  };
+}
+
+export function calculateFinancialOverview(input: {
+  start: Date;
+  months: number;
+  invoices: Array<{
+    status: InvoiceStatus;
+    total: Prisma.Decimal | number;
+    discount: Prisma.Decimal | number;
+    dueDate: Date;
+  }>;
+  payments: Array<{ amount: Prisma.Decimal | number; paidAt: Date }>;
+  mrr: number;
+}) {
+  const monthly = Array.from({ length: input.months }, (_, index) => {
+    const date = new Date(input.start.getFullYear(), input.start.getMonth() + index, 1);
+    return {
+      key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+      label: date.toLocaleDateString('pt-BR', { month: 'short', year: '2-digit' }),
+      billed: 0,
+      received: 0,
+    };
+  });
+  const byMonth = new Map(monthly.map((item) => [item.key, item]));
+  const status = Object.values(InvoiceStatus).reduce<
+    Record<string, { count: number; total: number }>
+  >((summary, key) => ({ ...summary, [key]: { count: 0, total: 0 } }), {});
+  let billedRevenue = 0;
+  let discounts = 0;
+  for (const invoice of input.invoices) {
+    const total = Number(invoice.total);
+    billedRevenue += total;
+    discounts += Number(invoice.discount);
+    status[invoice.status].count += 1;
+    status[invoice.status].total += total;
+    const key = `${invoice.dueDate.getFullYear()}-${String(invoice.dueDate.getMonth() + 1).padStart(2, '0')}`;
+    const month = byMonth.get(key);
+    if (month) month.billed += total;
+  }
+  let realizedRevenue = 0;
+  for (const payment of input.payments) {
+    const amount = Number(payment.amount);
+    realizedRevenue += amount;
+    const key = `${payment.paidAt.getFullYear()}-${String(payment.paidAt.getMonth() + 1).padStart(2, '0')}`;
+    const month = byMonth.get(key);
+    if (month) month.received += amount;
+  }
+  return {
+    metrics: {
+      mrr: input.mrr,
+      arr: input.mrr * 12,
+      billedRevenue,
+      realizedRevenue,
+      outstandingAmount: status[InvoiceStatus.PENDING].total + status[InvoiceStatus.OVERDUE].total,
+      overdueAmount: status[InvoiceStatus.OVERDUE].total,
+      discounts,
+    },
+    status,
+    monthly,
   };
 }
 
@@ -198,6 +259,10 @@ export class ListInvoicesQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(50) limit = 20;
   @IsOptional() @IsEnum(InvoiceStatus) status?: InvoiceStatus;
   @IsOptional() @IsString() search?: string;
+}
+
+export class FinancialOverviewQuery {
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(24) months = 6;
 }
 
 export class CreateInvoiceDto {
@@ -570,6 +635,44 @@ export class SuperAdminService {
       planDistribution,
       recent,
     };
+  }
+
+  async financialOverview(query: FinancialOverviewQuery) {
+    const now = new Date();
+    const months = query.months || 6;
+    const start = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+    await this.db.subscriptionInvoice.updateMany({
+      where: { status: InvoiceStatus.PENDING, dueDate: { lt: now } },
+      data: { status: InvoiceStatus.OVERDUE },
+    });
+    await this.enforceDelinquencyRules();
+    const [invoices, payments, subscriptions] = await Promise.all([
+      this.db.subscriptionInvoice.findMany({
+        where: { dueDate: { gte: start, lt: end }, barbershop: { deletedAt: null } },
+        select: { status: true, total: true, discount: true, dueDate: true },
+      }),
+      this.db.subscriptionPayment.findMany({
+        where: {
+          status: BillingPaymentStatus.CONFIRMED,
+          paidAt: { gte: start, lt: end },
+          invoice: { barbershop: { deletedAt: null } },
+        },
+        select: { amount: true, paidAt: true },
+      }),
+      this.db.subscription.findMany({
+        where: { status: SubscriptionStatus.ACTIVE, barbershop: { deletedAt: null } },
+        select: { plan: { select: { price: true } } },
+      }),
+    ]);
+    const result = calculateFinancialOverview({
+      start,
+      months,
+      invoices,
+      payments,
+      mrr: subscriptions.reduce((sum, item) => sum + Number(item.plan.price), 0),
+    });
+    return { period: { start, end }, ...result };
   }
 
   async barbershop(id: string) {
@@ -1515,6 +1618,11 @@ export class SuperAdminController {
   @Post('billing/enforce-delinquency')
   enforceDelinquency(@CurrentUser() user: AuthenticatedUser) {
     return this.service.enforceDelinquencyRules(user.sub);
+  }
+
+  @Get('financial-overview')
+  financialOverview(@Query() query: FinancialOverviewQuery) {
+    return this.service.financialOverview(query);
   }
 
   @Get('invoices')

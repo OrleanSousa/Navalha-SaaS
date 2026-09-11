@@ -8,6 +8,7 @@ import { maskCnpj, maskCpf, maskPhone } from '../lib/masks';
 import { SuperOverview } from './SuperOverview';
 import { SuperPlans } from './SuperPlans';
 import { SuperBilling } from './SuperBilling';
+import { SuperFinance } from './SuperFinance';
 
 type Plan = { id: string; name: string; price: string | number; active: boolean };
 type Barbershop = {
@@ -20,7 +21,7 @@ type Barbershop = {
   _count: { users: number; employees: number };
   onboarding: { percentage: number; completed: number; total: number };
 };
-type View = 'dashboard' | 'barbershops' | 'plans' | 'payments';
+type View = 'dashboard' | 'barbershops' | 'plans' | 'payments' | 'finance';
 type TenantEdit = {
   name: string;
   ownerName: string;
@@ -209,6 +210,7 @@ export function SuperAdmin() {
             ['barbershops', 'Barbearias'],
             ['plans', 'Planos'],
             ['payments', 'Pagamentos'],
+            ['finance', 'Financeiro'],
           ] as Array<[View, string]>
         ).map(([key, label]) => (
           <button className={view === key ? 'active' : ''} onClick={() => setView(key)} key={key}>
@@ -220,6 +222,7 @@ export function SuperAdmin() {
         {view === 'dashboard' && <SuperOverview onShowTenants={() => setView('barbershops')} />}
         {view === 'plans' && <SuperPlans />}
         {view === 'payments' && <SuperBilling />}
+        {view === 'finance' && <SuperFinance />}
         <section hidden={view !== 'barbershops'}>
           <div className="module-head">
             <div>

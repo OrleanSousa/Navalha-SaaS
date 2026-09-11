@@ -3,11 +3,56 @@ import { BarbershopStatus, CouponDiscountType, Prisma, SubscriptionStatus } from
 import {
   buildDunningSchedule,
   calculateCommercialMetrics,
+  calculateFinancialOverview,
   DocumentType,
   SuperAdminService,
 } from './super-admin';
 
 describe('SuperAdminService', () => {
+  it('consolida faturamento, recebimentos e carteira por mês', () => {
+    const result = calculateFinancialOverview({
+      start: new Date(2026, 0, 1),
+      months: 2,
+      mrr: 300,
+      invoices: [
+        {
+          status: 'PENDING',
+          total: new Prisma.Decimal(100),
+          discount: new Prisma.Decimal(0),
+          dueDate: new Date(2026, 0, 10),
+        },
+        {
+          status: 'OVERDUE',
+          total: new Prisma.Decimal(50),
+          discount: new Prisma.Decimal(0),
+          dueDate: new Date(2026, 1, 10),
+        },
+        {
+          status: 'PAID',
+          total: new Prisma.Decimal(200),
+          discount: new Prisma.Decimal(10),
+          dueDate: new Date(2026, 1, 15),
+        },
+      ],
+      payments: [{ amount: new Prisma.Decimal(200), paidAt: new Date(2026, 1, 16) }],
+    });
+
+    expect(result.metrics).toEqual({
+      mrr: 300,
+      arr: 3600,
+      billedRevenue: 350,
+      realizedRevenue: 200,
+      outstandingAmount: 150,
+      overdueAmount: 50,
+      discounts: 10,
+    });
+    expect(result.monthly.map(({ billed, received }) => ({ billed, received }))).toEqual([
+      { billed: 100, received: 0 },
+      { billed: 250, received: 200 },
+    ]);
+    expect(result.status.PAID).toEqual({ count: 1, total: 200 });
+  });
+
   it('monta a régua de cobrança em D-3, D0, D+3 e D+7', () => {
     const dueDate = new Date('2026-10-10T12:00:00.000Z');
 
