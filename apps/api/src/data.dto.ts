@@ -122,3 +122,11 @@ export class UpdateEmployeeAccessDto {
   @IsString({ each: true })
   permissions: string[];
 }
+
+export class SetEmployeeCommissionDto {
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  defaultCommission: number;
+}

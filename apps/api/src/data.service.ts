@@ -390,6 +390,23 @@ export class DataService {
     return this.employeeAccess(id);
   }
 
+  async setEmployeeCommission(id: string, defaultCommission: number) {
+    const employee = await this.db.employee.findFirst({
+      where: {
+        id,
+        barbershopId: this.tenant.barbershopId,
+        deletedAt: null,
+      },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+
+    return this.db.employee.update({
+      where: { id: employee.id },
+      data: { defaultCommission },
+    });
+  }
+
   services() {
     return this.db.service.findMany({
       where: { barbershopId: this.tenant.barbershopId, deletedAt: null },

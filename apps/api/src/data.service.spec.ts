@@ -374,6 +374,32 @@ describe('DataService tenant isolation', () => {
     });
   });
 
+  it('configura comissão padrão somente no colaborador do tenant', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.employee.update.mockResolvedValue({ id: 'employee-1', defaultCommission: 42.5 });
+
+    const result = await service.setEmployeeCommission('employee-1', 42.5);
+
+    expect(db.employee.findFirst).toHaveBeenCalledWith({
+      where: { id: 'employee-1', barbershopId: 'shop-1', deletedAt: null },
+      select: { id: true },
+    });
+    expect(db.employee.update).toHaveBeenCalledWith({
+      where: { id: 'employee-1' },
+      data: { defaultCommission: 42.5 },
+    });
+    expect(result.defaultCommission).toBe(42.5);
+  });
+
+  it('não configura comissão de colaborador de outro tenant', async () => {
+    db.employee.findFirst.mockResolvedValue(null);
+
+    await expect(service.setEmployeeCommission('employee-other', 30)).rejects.toThrow(
+      'Colaborador não encontrado',
+    );
+    expect(db.employee.update).not.toHaveBeenCalled();
+  });
+
   it('aplica o tenant em todas as consultas do dashboard', async () => {
     await service.dashboard();
 

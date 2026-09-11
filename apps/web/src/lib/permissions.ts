@@ -8,6 +8,7 @@ export const Permissions = {
   EMPLOYEES_PHOTO: 'employees.photo',
   EMPLOYEES_ACCESS: 'employees.access',
   EMPLOYEES_PERMISSIONS: 'employees.permissions',
+  EMPLOYEES_COMMISSION: 'employees.commission',
   SERVICES_READ: 'services.read',
   PRODUCTS_READ: 'products.read',
   APPOINTMENTS_READ: 'appointments.read',

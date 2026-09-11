@@ -6,6 +6,7 @@ import {
   KeyRound,
   Mail,
   Pencil,
+  Percent,
   Phone,
   Plus,
   Power,
@@ -96,6 +97,8 @@ export function Employees() {
   const [permissionEmployee, setPermissionEmployee] = useState<Employee>();
   const [accessEdit, setAccessEdit] = useState({ email: '', role: 'BARBER', active: true });
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [commissionEmployee, setCommissionEmployee] = useState<Employee>();
+  const [commissionValue, setCommissionValue] = useState('0');
   const [form, setForm] = useState(emptyForm);
 
   const photoPreview = useMemo(
@@ -231,6 +234,20 @@ export function Employees() {
       toast.error(error.response?.data?.message || 'Não foi possível atualizar o acesso'),
   });
 
+  const updateCommission = useMutation({
+    mutationFn: () =>
+      api.patch(`/employees/${commissionEmployee?.id}/commission`, {
+        defaultCommission: Number(commissionValue),
+      }),
+    onSuccess: async () => {
+      toast.success('Comissão padrão atualizada');
+      setCommissionEmployee(undefined);
+      await queryClient.invalidateQueries({ queryKey: ['employees'] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível atualizar a comissão'),
+  });
+
   function closeForm() {
     setShowForm(false);
     setEditingId(undefined);
@@ -240,6 +257,9 @@ export function Employees() {
   }
 
   function edit(employee: Employee) {
+    setAccessEmployee(undefined);
+    setPermissionEmployee(undefined);
+    setCommissionEmployee(undefined);
     setEditingId(employee.id);
     setPhotoFile(undefined);
     setCurrentPhotoUrl(assetUrl(employee.photoUrl));
@@ -283,6 +303,7 @@ export function Employees() {
   function openAccess(employee: Employee) {
     closeForm();
     setPermissionEmployee(undefined);
+    setCommissionEmployee(undefined);
     setAccessEmployee(employee);
     setAccessForm({ email: employee.email || '', password: '', role: 'BARBER' });
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -291,7 +312,17 @@ export function Employees() {
   function openPermissions(employee: Employee) {
     closeForm();
     setAccessEmployee(undefined);
+    setCommissionEmployee(undefined);
     setPermissionEmployee(employee);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  function openCommission(employee: Employee) {
+    closeForm();
+    setAccessEmployee(undefined);
+    setPermissionEmployee(undefined);
+    setCommissionEmployee(employee);
+    setCommissionValue(String(employee.defaultCommission));
     window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
@@ -314,6 +345,9 @@ export function Employees() {
             <button
               className="primary"
               onClick={() => {
+                setAccessEmployee(undefined);
+                setPermissionEmployee(undefined);
+                setCommissionEmployee(undefined);
                 setEditingId(undefined);
                 setPhotoFile(undefined);
                 setCurrentPhotoUrl('');
@@ -326,6 +360,56 @@ export function Employees() {
           )}
         </div>
       </div>
+
+      {commissionEmployee && (
+        <form
+          className="card commission-editor"
+          onSubmit={(event) => {
+            event.preventDefault();
+            updateCommission.mutate();
+          }}
+        >
+          <div>
+            <h3>Comissão de {commissionEmployee.name}</h3>
+            <p>Percentual padrão aplicado quando o serviço não tiver uma regra específica.</p>
+          </div>
+          <label className="commission-range">
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="0.5"
+              value={commissionValue}
+              onChange={(event) => setCommissionValue(event.target.value)}
+              aria-label="Comissão padrão"
+            />
+          </label>
+          <label className="commission-number">
+            <input
+              type="number"
+              min="0"
+              max="100"
+              step="0.01"
+              value={commissionValue}
+              onChange={(event) => setCommissionValue(event.target.value)}
+              required
+            />
+            <Percent />
+          </label>
+          <div className="employee-access-actions">
+            <button
+              type="button"
+              className="outline"
+              onClick={() => setCommissionEmployee(undefined)}
+            >
+              Cancelar
+            </button>
+            <button type="submit" className="primary" disabled={updateCommission.isPending}>
+              <Save /> {updateCommission.isPending ? 'Salvando...' : 'Salvar comissão'}
+            </button>
+          </div>
+        </form>
+      )}
 
       {permissionEmployee && (
         <form
@@ -762,6 +846,16 @@ export function Employees() {
                           aria-label={`Editar permissões de ${employee.name}`}
                         >
                           <ShieldCheck />
+                        </button>
+                      )}
+                      {can(Permissions.EMPLOYEES_COMMISSION) && (
+                        <button
+                          className="icon commission-action"
+                          onClick={() => openCommission(employee)}
+                          title="Configurar comissão padrão"
+                          aria-label={`Configurar comissão de ${employee.name}`}
+                        >
+                          <Percent />
                         </button>
                       )}
                     </div>

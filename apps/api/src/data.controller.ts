@@ -21,6 +21,7 @@ import {
   CreateEmployeeAccessDto,
   ListEmployeesQuery,
   SetEmployeeStatusDto,
+  SetEmployeeCommissionDto,
   UpdateEmployeeAccessDto,
   UpdateEmployeeDto,
 } from './data.dto';
@@ -98,6 +99,12 @@ export class DataController {
   @RequirePermissions(Permissions.EMPLOYEES_PERMISSIONS)
   updateEmployeeAccess(@Param('id') id: string, @Body() dto: UpdateEmployeeAccessDto) {
     return this.data.updateEmployeeAccess(id, dto);
+  }
+
+  @Patch('employees/:id/commission')
+  @RequirePermissions(Permissions.EMPLOYEES_COMMISSION)
+  setEmployeeCommission(@Param('id') id: string, @Body() dto: SetEmployeeCommissionDto) {
+    return this.data.setEmployeeCommission(id, dto.defaultCommission);
   }
 
   @Get('services')
