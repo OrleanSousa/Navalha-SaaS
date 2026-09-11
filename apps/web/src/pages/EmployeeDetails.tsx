@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowLeft,
   BriefcaseBusiness,
@@ -6,15 +6,24 @@ import {
   Clock3,
   Mail,
   MapPin,
+  Pencil,
   Percent,
   Phone,
+  Plus,
   ReceiptText,
+  Save,
   ShieldCheck,
+  Trash2,
   UserRound,
   WalletCards,
+  X,
 } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { api, assetUrl, money } from '../lib/api';
+import { useAuth } from '../lib/auth';
+import { Permissions } from '../lib/permissions';
 
 type Details = {
   employee: {
@@ -83,17 +92,83 @@ const statusLabels: Record<string, string> = {
   NO_SHOW: 'Não compareceu',
 };
 
+const emptyScheduleForm = {
+  weekday: '1',
+  startTime: '08:00',
+  endTime: '18:00',
+  breakStart: '',
+  breakEnd: '',
+  active: true,
+};
+
 function date(value?: string | null) {
   return value ? new Intl.DateTimeFormat('pt-BR').format(new Date(value)) : 'Não informado';
 }
 
 export function EmployeeDetails() {
   const { id } = useParams();
+  const { can } = useAuth();
+  const queryClient = useQueryClient();
+  const [showScheduleForm, setShowScheduleForm] = useState(false);
+  const [editingScheduleId, setEditingScheduleId] = useState<string>();
+  const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm);
   const { data, isLoading, isError } = useQuery<Details>({
     queryKey: ['employee-details', id],
     queryFn: async () => (await api.get(`/employees/${id}`)).data,
     enabled: Boolean(id),
   });
+
+  const saveSchedule = useMutation({
+    mutationFn: () => {
+      const payload = {
+        weekday: Number(scheduleForm.weekday),
+        startTime: scheduleForm.startTime,
+        endTime: scheduleForm.endTime,
+        breakStart: scheduleForm.breakStart || null,
+        breakEnd: scheduleForm.breakEnd || null,
+        active: scheduleForm.active,
+      };
+      return editingScheduleId
+        ? api.patch(`/employees/${id}/schedules/${editingScheduleId}`, payload)
+        : api.post(`/employees/${id}/schedules`, payload);
+    },
+    onSuccess: async () => {
+      toast.success(editingScheduleId ? 'Jornada atualizada' : 'Jornada adicionada');
+      closeScheduleForm();
+      await queryClient.invalidateQueries({ queryKey: ['employee-details', id] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível salvar a jornada'),
+  });
+
+  const deleteSchedule = useMutation({
+    mutationFn: (scheduleId: string) => api.delete(`/employees/${id}/schedules/${scheduleId}`),
+    onSuccess: async () => {
+      toast.success('Jornada excluída');
+      await queryClient.invalidateQueries({ queryKey: ['employee-details', id] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível excluir a jornada'),
+  });
+
+  function closeScheduleForm() {
+    setShowScheduleForm(false);
+    setEditingScheduleId(undefined);
+    setScheduleForm(emptyScheduleForm);
+  }
+
+  function editSchedule(schedule: Details['employee']['schedules'][number]) {
+    setEditingScheduleId(schedule.id);
+    setShowScheduleForm(true);
+    setScheduleForm({
+      weekday: String(schedule.weekday),
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+      breakStart: schedule.breakStart || '',
+      breakEnd: schedule.breakEnd || '',
+      active: schedule.active,
+    });
+  }
 
   if (isLoading) return <div className="empty big">Carregando colaborador...</div>;
   if (isError || !data) {
@@ -232,7 +307,113 @@ export function EmployeeDetails() {
           </dl>
         </div>
         <aside>
-          <h3>Jornada semanal</h3>
+          <div className="schedule-section-head">
+            <h3>Jornada semanal</h3>
+            {can(Permissions.EMPLOYEES_SCHEDULE) && !showScheduleForm && (
+              <button
+                className="outline small"
+                type="button"
+                onClick={() => setShowScheduleForm(true)}
+              >
+                <Plus /> Adicionar
+              </button>
+            )}
+          </div>
+          {showScheduleForm && (
+            <form
+              className="schedule-form"
+              onSubmit={(event) => {
+                event.preventDefault();
+                saveSchedule.mutate();
+              }}
+            >
+              <label>
+                Dia da semana
+                <select
+                  value={scheduleForm.weekday}
+                  onChange={(event) =>
+                    setScheduleForm({ ...scheduleForm, weekday: event.target.value })
+                  }
+                >
+                  {weekdays.map((weekday, index) => (
+                    <option key={weekday} value={index}>
+                      {weekday}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Início
+                <input
+                  type="time"
+                  required
+                  value={scheduleForm.startTime}
+                  onChange={(event) =>
+                    setScheduleForm({ ...scheduleForm, startTime: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Fim
+                <input
+                  type="time"
+                  required
+                  value={scheduleForm.endTime}
+                  onChange={(event) =>
+                    setScheduleForm({ ...scheduleForm, endTime: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Início da pausa
+                <input
+                  type="time"
+                  value={scheduleForm.breakStart}
+                  onChange={(event) =>
+                    setScheduleForm({ ...scheduleForm, breakStart: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                Fim da pausa
+                <input
+                  type="time"
+                  value={scheduleForm.breakEnd}
+                  onChange={(event) =>
+                    setScheduleForm({ ...scheduleForm, breakEnd: event.target.value })
+                  }
+                />
+              </label>
+              <label className="schedule-active-toggle">
+                <input
+                  type="checkbox"
+                  checked={scheduleForm.active}
+                  onChange={(event) =>
+                    setScheduleForm({ ...scheduleForm, active: event.target.checked })
+                  }
+                />
+                Jornada ativa
+              </label>
+              <div className="schedule-form-actions">
+                <button
+                  className="icon-btn"
+                  type="button"
+                  title="Cancelar"
+                  onClick={closeScheduleForm}
+                >
+                  <X />
+                </button>
+                <button
+                  className="primary icon-btn"
+                  type="submit"
+                  title="Salvar"
+                  disabled={saveSchedule.isPending}
+                >
+                  <Save />
+                </button>
+              </div>
+            </form>
+          )}
           {!employee.schedules.length ? (
             <p className="detail-empty">Nenhuma jornada configurada.</p>
           ) : (
@@ -246,6 +427,31 @@ export function EmployeeDetails() {
                   <small>
                     Pausa {schedule.breakStart}–{schedule.breakEnd}
                   </small>
+                )}
+                {can(Permissions.EMPLOYEES_SCHEDULE) && (
+                  <div className="schedule-line-actions">
+                    <button
+                      className="icon-btn"
+                      type="button"
+                      title="Editar jornada"
+                      onClick={() => editSchedule(schedule)}
+                    >
+                      <Pencil />
+                    </button>
+                    <button
+                      className="icon-btn danger"
+                      type="button"
+                      title="Excluir jornada"
+                      disabled={deleteSchedule.isPending}
+                      onClick={() => {
+                        if (window.confirm('Excluir esta jornada semanal?')) {
+                          deleteSchedule.mutate(schedule.id);
+                        }
+                      }}
+                    >
+                      <Trash2 />
+                    </button>
+                  </div>
                 )}
               </div>
             ))

@@ -130,3 +130,36 @@ export class SetEmployeeCommissionDto {
   @Max(100)
   defaultCommission: number;
 }
+
+export class CreateWorkScheduleDto {
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(6)
+  weekday: number;
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  startTime: string;
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  endTime: string;
+
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  breakStart?: string;
+
+  @IsOptional()
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  breakEnd?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  active = true;
+}
+
+export class UpdateWorkScheduleDto extends PartialType(CreateWorkScheduleDto) {
+  constructor() {
+    super();
+    this.active = undefined;
+  }
+}

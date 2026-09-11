@@ -18,6 +18,8 @@ import {
   ListEmployeesQuery,
   UpdateEmployeeDto,
   UpdateEmployeeAccessDto,
+  CreateWorkScheduleDto,
+  UpdateWorkScheduleDto,
 } from './data.dto';
 
 @Injectable()
@@ -463,6 +465,57 @@ export class DataService {
       where: { id: employee.id },
       data: { defaultCommission },
     });
+  }
+
+  async createWorkSchedule(employeeId: string, dto: CreateWorkScheduleDto) {
+    const barbershopId = this.tenant.barbershopId;
+    const employee = await this.db.employee.findFirst({
+      where: { id: employeeId, barbershopId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+
+    return this.db.workSchedule.create({
+      data: {
+        barbershopId,
+        employeeId: employee.id,
+        weekday: dto.weekday,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        breakStart: dto.breakStart || null,
+        breakEnd: dto.breakEnd || null,
+        active: dto.active,
+      },
+    });
+  }
+
+  async updateWorkSchedule(employeeId: string, scheduleId: string, dto: UpdateWorkScheduleDto) {
+    const schedule = await this.db.workSchedule.findFirst({
+      where: { id: scheduleId, employeeId, barbershopId: this.tenant.barbershopId },
+      select: { id: true },
+    });
+    if (!schedule) throw new NotFoundException('Jornada não encontrada');
+
+    return this.db.workSchedule.update({
+      where: { id: schedule.id },
+      data: {
+        weekday: dto.weekday,
+        startTime: dto.startTime,
+        endTime: dto.endTime,
+        breakStart: dto.breakStart === undefined ? undefined : dto.breakStart || null,
+        breakEnd: dto.breakEnd === undefined ? undefined : dto.breakEnd || null,
+        active: dto.active,
+      },
+    });
+  }
+
+  async deleteWorkSchedule(employeeId: string, scheduleId: string) {
+    const schedule = await this.db.workSchedule.findFirst({
+      where: { id: scheduleId, employeeId, barbershopId: this.tenant.barbershopId },
+      select: { id: true },
+    });
+    if (!schedule) throw new NotFoundException('Jornada não encontrada');
+    await this.db.workSchedule.delete({ where: { id: schedule.id } });
   }
 
   services() {

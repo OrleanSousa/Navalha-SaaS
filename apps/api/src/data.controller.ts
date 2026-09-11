@@ -2,7 +2,9 @@ import {
   BadRequestException,
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -18,12 +20,14 @@ import { memoryStorage } from 'multer';
 import { DataService } from './data.service';
 import {
   CreateEmployeeDto,
+  CreateWorkScheduleDto,
   CreateEmployeeAccessDto,
   ListEmployeesQuery,
   SetEmployeeStatusDto,
   SetEmployeeCommissionDto,
   UpdateEmployeeAccessDto,
   UpdateEmployeeDto,
+  UpdateWorkScheduleDto,
 } from './data.dto';
 import { Permissions, PermissionsGuard, RequirePermissions, Roles, RolesGuard } from './rbac';
 
@@ -111,6 +115,29 @@ export class DataController {
   @RequirePermissions(Permissions.EMPLOYEES_COMMISSION)
   setEmployeeCommission(@Param('id') id: string, @Body() dto: SetEmployeeCommissionDto) {
     return this.data.setEmployeeCommission(id, dto.defaultCommission);
+  }
+
+  @Post('employees/:id/schedules')
+  @RequirePermissions(Permissions.EMPLOYEES_SCHEDULE)
+  createWorkSchedule(@Param('id') id: string, @Body() dto: CreateWorkScheduleDto) {
+    return this.data.createWorkSchedule(id, dto);
+  }
+
+  @Patch('employees/:id/schedules/:scheduleId')
+  @RequirePermissions(Permissions.EMPLOYEES_SCHEDULE)
+  updateWorkSchedule(
+    @Param('id') id: string,
+    @Param('scheduleId') scheduleId: string,
+    @Body() dto: UpdateWorkScheduleDto,
+  ) {
+    return this.data.updateWorkSchedule(id, scheduleId, dto);
+  }
+
+  @Delete('employees/:id/schedules/:scheduleId')
+  @HttpCode(204)
+  @RequirePermissions(Permissions.EMPLOYEES_SCHEDULE)
+  deleteWorkSchedule(@Param('id') id: string, @Param('scheduleId') scheduleId: string) {
+    return this.data.deleteWorkSchedule(id, scheduleId);
   }
 
   @Get('services')

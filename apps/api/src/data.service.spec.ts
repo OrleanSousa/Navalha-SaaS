@@ -50,6 +50,12 @@ describe('DataService tenant isolation', () => {
       commission: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
       },
+      workSchedule: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        update: jest.fn(),
+        delete: jest.fn(),
+      },
       cashRegister: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     db.$transaction = jest.fn((callback) => callback(db));
@@ -446,6 +452,64 @@ describe('DataService tenant isolation', () => {
       'Colaborador não encontrado',
     );
     expect(db.employee.update).not.toHaveBeenCalled();
+  });
+
+  it('cria jornada vinculada ao colaborador e tenant autenticados', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.workSchedule.create.mockResolvedValue({ id: 'schedule-1' });
+
+    await service.createWorkSchedule('employee-1', {
+      weekday: 1,
+      startTime: '08:00',
+      endTime: '18:00',
+      breakStart: '12:00',
+      breakEnd: '13:00',
+      active: true,
+    });
+
+    expect(db.workSchedule.create).toHaveBeenCalledWith({
+      data: {
+        barbershopId: 'shop-1',
+        employeeId: 'employee-1',
+        weekday: 1,
+        startTime: '08:00',
+        endTime: '18:00',
+        breakStart: '12:00',
+        breakEnd: '13:00',
+        active: true,
+      },
+    });
+  });
+
+  it('edita e exclui somente jornada pertencente ao tenant e colaborador', async () => {
+    db.workSchedule.findFirst.mockResolvedValue({ id: 'schedule-1' });
+    db.workSchedule.update.mockResolvedValue({ id: 'schedule-1', endTime: '17:00' });
+
+    await service.updateWorkSchedule('employee-1', 'schedule-1', { endTime: '17:00' });
+    await service.deleteWorkSchedule('employee-1', 'schedule-1');
+
+    expect(db.workSchedule.findFirst).toHaveBeenCalledWith({
+      where: { id: 'schedule-1', employeeId: 'employee-1', barbershopId: 'shop-1' },
+      select: { id: true },
+    });
+    expect(db.workSchedule.update).toHaveBeenCalledWith({
+      where: { id: 'schedule-1' },
+      data: expect.objectContaining({ endTime: '17:00' }),
+    });
+    expect(db.workSchedule.delete).toHaveBeenCalledWith({ where: { id: 'schedule-1' } });
+  });
+
+  it('não altera jornada pertencente a outro tenant', async () => {
+    db.workSchedule.findFirst.mockResolvedValue(null);
+
+    await expect(
+      service.updateWorkSchedule('employee-1', 'schedule-other', { endTime: '17:00' }),
+    ).rejects.toThrow('Jornada não encontrada');
+    await expect(service.deleteWorkSchedule('employee-1', 'schedule-other')).rejects.toThrow(
+      'Jornada não encontrada',
+    );
+    expect(db.workSchedule.update).not.toHaveBeenCalled();
+    expect(db.workSchedule.delete).not.toHaveBeenCalled();
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {
