@@ -150,6 +150,61 @@ export function calculateFinancialOverview(input: {
   };
 }
 
+export function buildCommercialReportRows(
+  barbershops: Array<{
+    id: string;
+    name: string;
+    status: BarbershopStatus;
+    subscription: { status: SubscriptionStatus; plan: { id: string; name: string } } | null;
+    subscriptionInvoices: Array<{
+      status: InvoiceStatus;
+      total: Prisma.Decimal | number;
+      discount: Prisma.Decimal | number;
+      payments: Array<{ amount: Prisma.Decimal | number }>;
+    }>;
+  }>,
+) {
+  const rows = barbershops.map((barbershop) => {
+    const invoices = barbershop.subscriptionInvoices;
+    return {
+      barbershopId: barbershop.id,
+      barbershop: barbershop.name,
+      barbershopStatus: barbershop.status,
+      subscriptionStatus: barbershop.subscription?.status || null,
+      planId: barbershop.subscription?.plan.id || null,
+      plan: barbershop.subscription?.plan.name || 'SEM PLANO',
+      invoices: invoices.length,
+      billed: invoices.reduce((sum, invoice) => sum + Number(invoice.total), 0),
+      received: invoices.reduce(
+        (sum, invoice) =>
+          sum + invoice.payments.reduce((paid, payment) => paid + Number(payment.amount), 0),
+        0,
+      ),
+      overdue: invoices
+        .filter((invoice) => invoice.status === InvoiceStatus.OVERDUE)
+        .reduce((sum, invoice) => sum + Number(invoice.total), 0),
+      discounts: invoices.reduce((sum, invoice) => sum + Number(invoice.discount), 0),
+    };
+  });
+  rows.sort(
+    (left, right) => right.billed - left.billed || left.barbershop.localeCompare(right.barbershop),
+  );
+  return {
+    rows,
+    totals: rows.reduce(
+      (totals, row) => ({
+        tenants: totals.tenants + 1,
+        invoices: totals.invoices + row.invoices,
+        billed: totals.billed + row.billed,
+        received: totals.received + row.received,
+        overdue: totals.overdue + row.overdue,
+        discounts: totals.discounts + row.discounts,
+      }),
+      { tenants: 0, invoices: 0, billed: 0, received: 0, overdue: 0, discounts: 0 },
+    ),
+  };
+}
+
 export enum DocumentType {
   CPF = 'CPF',
   CNPJ = 'CNPJ',
@@ -266,6 +321,14 @@ export class ListInvoicesQuery {
 
 export class FinancialOverviewQuery {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(24) months = 6;
+}
+
+export class CommercialReportQuery {
+  @IsOptional() @IsDateString() startDate?: string;
+  @IsOptional() @IsDateString() endDate?: string;
+  @IsOptional() @IsUUID() planId?: string;
+  @IsOptional() @IsEnum(SubscriptionStatus) subscriptionStatus?: SubscriptionStatus;
+  @IsOptional() @IsEnum(InvoiceStatus) invoiceStatus?: InvoiceStatus;
 }
 
 export class UpdateGatewayConfigurationDto {
@@ -743,6 +806,72 @@ export class SuperAdminService {
       mrr: subscriptions.reduce((sum, item) => sum + Number(item.plan.price), 0),
     });
     return { period: { start, end }, ...result };
+  }
+
+  async commercialReport(query: CommercialReportQuery) {
+    const now = new Date();
+    const start = query.startDate
+      ? new Date(query.startDate)
+      : new Date(now.getFullYear(), now.getMonth(), 1);
+    const inclusiveEnd = query.endDate ? new Date(query.endDate) : now;
+    const end = new Date(inclusiveEnd);
+    end.setDate(end.getDate() + 1);
+    if (end <= start)
+      throw new BadRequestException('O fim do período deve ser posterior ao início');
+    if (end.getTime() - start.getTime() > 732 * 86400000) {
+      throw new BadRequestException('O relatório está limitado a dois anos');
+    }
+    await this.db.subscriptionInvoice.updateMany({
+      where: { status: InvoiceStatus.PENDING, dueDate: { lt: now } },
+      data: { status: InvoiceStatus.OVERDUE },
+    });
+    await this.enforceDelinquencyRules();
+    const subscriptionFilter =
+      query.planId || query.subscriptionStatus
+        ? {
+            is: {
+              ...(query.planId ? { planId: query.planId } : {}),
+              ...(query.subscriptionStatus ? { status: query.subscriptionStatus } : {}),
+            },
+          }
+        : undefined;
+    const barbershops = await this.db.barbershop.findMany({
+      where: {
+        deletedAt: null,
+        ...(subscriptionFilter ? { subscription: subscriptionFilter } : {}),
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        subscription: { select: { status: true, plan: { select: { id: true, name: true } } } },
+        subscriptionInvoices: {
+          where: {
+            dueDate: { gte: start, lt: end },
+            ...(query.invoiceStatus ? { status: query.invoiceStatus } : {}),
+          },
+          select: {
+            status: true,
+            total: true,
+            discount: true,
+            payments: {
+              where: { status: BillingPaymentStatus.CONFIRMED },
+              select: { amount: true },
+            },
+          },
+        },
+      },
+    });
+    return {
+      filters: {
+        startDate: start,
+        endDate: inclusiveEnd,
+        planId: query.planId || null,
+        subscriptionStatus: query.subscriptionStatus || null,
+        invoiceStatus: query.invoiceStatus || null,
+      },
+      ...buildCommercialReportRows(barbershops),
+    };
   }
 
   async barbershop(id: string) {
@@ -1693,6 +1822,11 @@ export class SuperAdminController {
   @Get('financial-overview')
   financialOverview(@Query() query: FinancialOverviewQuery) {
     return this.service.financialOverview(query);
+  }
+
+  @Get('commercial-report')
+  commercialReport(@Query() query: CommercialReportQuery) {
+    return this.service.commercialReport(query);
   }
 
   @Get('billing/gateway')

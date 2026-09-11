@@ -106,7 +106,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 3.22 Criar tela de pagamentos e faturas no Super Admin
 - [x] 3.23 Criar visão financeira consolidada do SaaS
 - [x] 3.24 Criar interface para integração futura com gateway de pagamento
-- [ ] 3.25 Criar relatórios comerciais por período, plano e status
+- [x] 3.25 Criar relatórios comerciais por período, plano e status
 
 ## Etapa 4 — Colaboradores e usuários
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Concluir a **Etapa 3** com os relatórios comerciais por período, plano e status (item 3.25). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Iniciar a **Etapa 4** pela listagem de colaboradores com busca, filtro e paginação (item 4.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

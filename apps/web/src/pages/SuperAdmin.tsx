@@ -10,6 +10,7 @@ import { SuperPlans } from './SuperPlans';
 import { SuperBilling } from './SuperBilling';
 import { SuperFinance } from './SuperFinance';
 import { SuperGateway } from './SuperGateway';
+import { SuperReports } from './SuperReports';
 
 type Plan = { id: string; name: string; price: string | number; active: boolean };
 type Barbershop = {
@@ -22,7 +23,7 @@ type Barbershop = {
   _count: { users: number; employees: number };
   onboarding: { percentage: number; completed: number; total: number };
 };
-type View = 'dashboard' | 'barbershops' | 'plans' | 'payments' | 'finance' | 'gateway';
+type View = 'dashboard' | 'barbershops' | 'plans' | 'payments' | 'finance' | 'gateway' | 'reports';
 type TenantEdit = {
   name: string;
   ownerName: string;
@@ -213,6 +214,7 @@ export function SuperAdmin() {
             ['payments', 'Pagamentos'],
             ['finance', 'Financeiro'],
             ['gateway', 'Integração'],
+            ['reports', 'Relatórios'],
           ] as Array<[View, string]>
         ).map(([key, label]) => (
           <button className={view === key ? 'active' : ''} onClick={() => setView(key)} key={key}>
@@ -226,6 +228,7 @@ export function SuperAdmin() {
         {view === 'payments' && <SuperBilling />}
         {view === 'finance' && <SuperFinance />}
         {view === 'gateway' && <SuperGateway />}
+        {view === 'reports' && <SuperReports />}
         <section hidden={view !== 'barbershops'}>
           <div className="module-head">
             <div>

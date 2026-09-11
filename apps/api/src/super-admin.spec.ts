@@ -9,6 +9,7 @@ import {
 } from '@prisma/client';
 import {
   buildDunningSchedule,
+  buildCommercialReportRows,
   calculateCommercialMetrics,
   calculateFinancialOverview,
   DocumentType,
@@ -16,6 +17,56 @@ import {
 } from './super-admin';
 
 describe('SuperAdminService', () => {
+  it('consolida o relatório comercial por tenant', () => {
+    const report = buildCommercialReportRows([
+      {
+        id: 'shop-1',
+        name: 'Barbearia Centro',
+        status: BarbershopStatus.ACTIVE,
+        subscription: {
+          status: SubscriptionStatus.ACTIVE,
+          plan: { id: 'plan-1', name: 'PRO' },
+        },
+        subscriptionInvoices: [
+          {
+            status: 'PAID',
+            total: new Prisma.Decimal(100),
+            discount: new Prisma.Decimal(10),
+            payments: [{ amount: new Prisma.Decimal(100) }],
+          },
+          {
+            status: 'OVERDUE',
+            total: new Prisma.Decimal(50),
+            discount: new Prisma.Decimal(0),
+            payments: [],
+          },
+        ],
+      },
+    ]);
+
+    expect(report.rows[0]).toEqual({
+      barbershopId: 'shop-1',
+      barbershop: 'Barbearia Centro',
+      barbershopStatus: BarbershopStatus.ACTIVE,
+      subscriptionStatus: SubscriptionStatus.ACTIVE,
+      planId: 'plan-1',
+      plan: 'PRO',
+      invoices: 2,
+      billed: 150,
+      received: 100,
+      overdue: 50,
+      discounts: 10,
+    });
+    expect(report.totals).toEqual({
+      tenants: 1,
+      invoices: 2,
+      billed: 150,
+      received: 100,
+      overdue: 50,
+      discounts: 10,
+    });
+  });
+
   it('informa a presença do segredo do gateway sem expor seu valor', async () => {
     process.env.TEST_GATEWAY_KEY = 'secret-value';
     const db = {
