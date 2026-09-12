@@ -102,6 +102,7 @@ export class DataService {
       include: {
         user: { select: { id: true, email: true, role: true, active: true } },
         schedules: { orderBy: [{ weekday: 'asc' }, { startTime: 'asc' }] },
+        unavailabilities: { orderBy: { startAt: 'asc' } },
         employeeServices: {
           include: {
             service: {

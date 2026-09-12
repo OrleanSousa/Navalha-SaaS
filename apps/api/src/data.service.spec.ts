@@ -134,6 +134,7 @@ describe('DataService tenant isolation', () => {
       id: 'employee-1',
       name: 'Maria',
       schedules: [],
+      unavailabilities: [],
       employeeServices: [],
     });
     db.appointment.findMany.mockResolvedValue([]);
@@ -146,6 +147,10 @@ describe('DataService tenant isolation', () => {
     expect(db.employee.findFirst).toHaveBeenCalledWith(
       expect.objectContaining({
         where: { id: 'employee-1', barbershopId: 'shop-1', deletedAt: null },
+        include: expect.objectContaining({
+          schedules: expect.any(Object),
+          unavailabilities: { orderBy: { startAt: 'asc' } },
+        }),
       }),
     );
     for (const [query] of [

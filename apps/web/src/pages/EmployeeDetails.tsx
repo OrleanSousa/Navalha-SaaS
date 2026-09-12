@@ -3,6 +3,7 @@ import {
   ArrowLeft,
   BriefcaseBusiness,
   CalendarCheck,
+  CalendarOff,
   Clock3,
   Mail,
   MapPin,
@@ -51,6 +52,14 @@ type Details = {
       breakStart?: string | null;
       breakEnd?: string | null;
       active: boolean;
+    }>;
+    unavailabilities: Array<{
+      id: string;
+      type: 'DAY_OFF' | 'VACATION' | 'LEAVE' | 'BLOCK';
+      startAt: string;
+      endAt: string;
+      allDay: boolean;
+      reason?: string | null;
     }>;
     employeeServices: Array<{
       id: string;
@@ -101,8 +110,51 @@ const emptyScheduleForm = {
   active: true,
 };
 
+type UnavailabilityType = Details['employee']['unavailabilities'][number]['type'];
+
+const unavailabilityLabels: Record<UnavailabilityType, string> = {
+  DAY_OFF: 'Folga',
+  VACATION: 'Férias',
+  LEAVE: 'Afastamento',
+  BLOCK: 'Bloqueio pontual',
+};
+
+const emptyUnavailabilityForm: {
+  type: UnavailabilityType;
+  date: string;
+  startDate: string;
+  endDate: string;
+  startAt: string;
+  endAt: string;
+  reason: string;
+} = {
+  type: 'DAY_OFF',
+  date: '',
+  startDate: '',
+  endDate: '',
+  startAt: '',
+  endAt: '',
+  reason: '',
+};
+
 function date(value?: string | null) {
   return value ? new Intl.DateTimeFormat('pt-BR').format(new Date(value)) : 'Não informado';
+}
+
+function unavailabilityPeriod(item: Details['employee']['unavailabilities'][number]) {
+  if (item.allDay) {
+    const end = new Date(item.endAt);
+    end.setUTCDate(end.getUTCDate() - 1);
+    const formatter = new Intl.DateTimeFormat('pt-BR', { dateStyle: 'medium', timeZone: 'UTC' });
+    const startLabel = formatter.format(new Date(item.startAt));
+    const endLabel = formatter.format(end);
+    return startLabel === endLabel ? startLabel : `${startLabel} a ${endLabel}`;
+  }
+  const formatter = new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  });
+  return `${formatter.format(new Date(item.startAt))} a ${formatter.format(new Date(item.endAt))}`;
 }
 
 export function EmployeeDetails() {
@@ -112,6 +164,8 @@ export function EmployeeDetails() {
   const [showScheduleForm, setShowScheduleForm] = useState(false);
   const [editingScheduleId, setEditingScheduleId] = useState<string>();
   const [scheduleForm, setScheduleForm] = useState(emptyScheduleForm);
+  const [showUnavailabilityForm, setShowUnavailabilityForm] = useState(false);
+  const [unavailabilityForm, setUnavailabilityForm] = useState(emptyUnavailabilityForm);
   const { data, isLoading, isError } = useQuery<Details>({
     queryKey: ['employee-details', id],
     queryFn: async () => (await api.get(`/employees/${id}`)).data,
@@ -149,6 +203,52 @@ export function EmployeeDetails() {
     },
     onError: (error: any) =>
       toast.error(error.response?.data?.message || 'Não foi possível excluir a jornada'),
+  });
+
+  const saveUnavailability = useMutation({
+    mutationFn: async () => {
+      const reason = unavailabilityForm.reason || undefined;
+      if (unavailabilityForm.type === 'DAY_OFF') {
+        await api.post(`/employees/${id}/unavailabilities/day-off`, {
+          date: unavailabilityForm.date,
+          reason,
+        });
+        return;
+      }
+      if (unavailabilityForm.type === 'BLOCK') {
+        await api.post(`/employees/${id}/unavailabilities/block`, {
+          startAt: new Date(unavailabilityForm.startAt).toISOString(),
+          endAt: new Date(unavailabilityForm.endAt).toISOString(),
+          reason,
+        });
+        return;
+      }
+      await api.post(`/employees/${id}/unavailabilities/absence`, {
+        type: unavailabilityForm.type,
+        startDate: unavailabilityForm.startDate,
+        endDate: unavailabilityForm.endDate,
+        reason,
+      });
+    },
+    onSuccess: async () => {
+      toast.success('Indisponibilidade adicionada');
+      setShowUnavailabilityForm(false);
+      setUnavailabilityForm(emptyUnavailabilityForm);
+      await queryClient.invalidateQueries({ queryKey: ['employee-details', id] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível salvar a indisponibilidade'),
+  });
+
+  const deleteUnavailability = useMutation({
+    mutationFn: (unavailabilityId: string) =>
+      api.delete(`/employees/${id}/unavailabilities/${unavailabilityId}`),
+    onSuccess: async () => {
+      toast.success('Indisponibilidade excluída');
+      await queryClient.invalidateQueries({ queryKey: ['employee-details', id] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível excluir a indisponibilidade'),
   });
 
   function closeScheduleForm() {
@@ -457,6 +557,197 @@ export function EmployeeDetails() {
             ))
           )}
         </aside>
+      </section>
+
+      <section className="employee-detail-section">
+        <div className="detail-section-head">
+          <div>
+            <h3>Indisponibilidades</h3>
+            <p>Folgas, férias, afastamentos e bloqueios da agenda.</p>
+          </div>
+          {can(Permissions.EMPLOYEES_UNAVAILABILITY) && !showUnavailabilityForm && (
+            <button
+              className="outline small"
+              type="button"
+              onClick={() => setShowUnavailabilityForm(true)}
+            >
+              <Plus /> Adicionar
+            </button>
+          )}
+        </div>
+
+        {showUnavailabilityForm && (
+          <form
+            className="unavailability-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              saveUnavailability.mutate();
+            }}
+          >
+            <label>
+              Tipo
+              <select
+                value={unavailabilityForm.type}
+                onChange={(event) =>
+                  setUnavailabilityForm({
+                    ...emptyUnavailabilityForm,
+                    type: event.target.value as UnavailabilityType,
+                  })
+                }
+              >
+                {Object.entries(unavailabilityLabels).map(([value, label]) => (
+                  <option key={value} value={value}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            {unavailabilityForm.type === 'DAY_OFF' && (
+              <label>
+                Data
+                <input
+                  type="date"
+                  required
+                  value={unavailabilityForm.date}
+                  onChange={(event) =>
+                    setUnavailabilityForm({ ...unavailabilityForm, date: event.target.value })
+                  }
+                />
+              </label>
+            )}
+
+            {(unavailabilityForm.type === 'VACATION' || unavailabilityForm.type === 'LEAVE') && (
+              <>
+                <label>
+                  Data inicial
+                  <input
+                    type="date"
+                    required
+                    value={unavailabilityForm.startDate}
+                    onChange={(event) =>
+                      setUnavailabilityForm({
+                        ...unavailabilityForm,
+                        startDate: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Data final
+                  <input
+                    type="date"
+                    required
+                    min={unavailabilityForm.startDate}
+                    value={unavailabilityForm.endDate}
+                    onChange={(event) =>
+                      setUnavailabilityForm({
+                        ...unavailabilityForm,
+                        endDate: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+              </>
+            )}
+
+            {unavailabilityForm.type === 'BLOCK' && (
+              <>
+                <label>
+                  Início
+                  <input
+                    type="datetime-local"
+                    required
+                    value={unavailabilityForm.startAt}
+                    onChange={(event) =>
+                      setUnavailabilityForm({
+                        ...unavailabilityForm,
+                        startAt: event.target.value,
+                      })
+                    }
+                  />
+                </label>
+                <label>
+                  Fim
+                  <input
+                    type="datetime-local"
+                    required
+                    min={unavailabilityForm.startAt}
+                    value={unavailabilityForm.endAt}
+                    onChange={(event) =>
+                      setUnavailabilityForm({ ...unavailabilityForm, endAt: event.target.value })
+                    }
+                  />
+                </label>
+              </>
+            )}
+
+            <label className="unavailability-reason">
+              Motivo
+              <input
+                maxLength={300}
+                value={unavailabilityForm.reason}
+                onChange={(event) =>
+                  setUnavailabilityForm({ ...unavailabilityForm, reason: event.target.value })
+                }
+                placeholder="Opcional"
+              />
+            </label>
+            <div className="unavailability-form-actions">
+              <button
+                className="icon-btn"
+                type="button"
+                title="Cancelar"
+                onClick={() => {
+                  setShowUnavailabilityForm(false);
+                  setUnavailabilityForm(emptyUnavailabilityForm);
+                }}
+              >
+                <X />
+              </button>
+              <button
+                className="primary icon-btn"
+                type="submit"
+                title="Salvar"
+                disabled={saveUnavailability.isPending}
+              >
+                <Save />
+              </button>
+            </div>
+          </form>
+        )}
+
+        {!employee.unavailabilities.length ? (
+          <p className="detail-empty">Nenhuma indisponibilidade cadastrada.</p>
+        ) : (
+          <div className="unavailability-list">
+            {employee.unavailabilities.map((item) => (
+              <div key={item.id}>
+                <CalendarOff />
+                <span>
+                  <b>{unavailabilityLabels[item.type]}</b>
+                  <small>{unavailabilityPeriod(item)}</small>
+                </span>
+                <p>{item.reason || 'Sem motivo informado'}</p>
+                {can(Permissions.EMPLOYEES_UNAVAILABILITY) && (
+                  <button
+                    className="icon-btn danger"
+                    type="button"
+                    title="Excluir indisponibilidade"
+                    disabled={deleteUnavailability.isPending}
+                    onClick={() => {
+                      if (window.confirm('Excluir esta indisponibilidade?')) {
+                        deleteUnavailability.mutate(item.id);
+                      }
+                    }}
+                  >
+                    <Trash2 />
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </section>
 
       <section className="employee-detail-section">
