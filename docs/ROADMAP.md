@@ -135,7 +135,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Etapa 6 — Clientes
 
-- [ ] 6.1 Criar cliente com telefone normalizado
+- [x] 6.1 Criar cliente com telefone normalizado
 - [ ] 6.2 Editar cliente
 - [ ] 6.3 Arquivar e restaurar cliente
 - [ ] 6.4 Buscar por nome, telefone e CPF
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Iniciar a **Etapa 6** criando clientes com telefone normalizado (item 6.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 6** com a edição de clientes (item 6.2). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

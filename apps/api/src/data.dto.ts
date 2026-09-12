@@ -25,6 +25,42 @@ export enum EmployeeStatusFilter {
   INACTIVE = 'INACTIVE',
 }
 
+export class CreateCustomerDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(30)
+  phone: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(30)
+  whatsapp?: string;
+
+  @IsOptional()
+  @IsEmail()
+  @MaxLength(160)
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(20)
+  cpf?: string;
+
+  @IsOptional()
+  @IsDateString()
+  birthDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string;
+}
+
 export class ListEmployeesQuery {
   @IsOptional()
   @Type(() => Number)

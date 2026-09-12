@@ -15,7 +15,7 @@ describe('DataService tenant isolation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     db = {
-      customer: { findMany: jest.fn().mockResolvedValue([]) },
+      customer: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
       employee: {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
@@ -81,6 +81,40 @@ describe('DataService tenant isolation', () => {
         where: expect.objectContaining({ barbershopId: 'shop-1' }),
       }),
     );
+  });
+
+  it('cadastra cliente com telefone e WhatsApp normalizados', async () => {
+    db.customer.create.mockResolvedValue({ id: 'customer-1' });
+
+    await service.createCustomer({
+      name: '  Ana Souza  ',
+      phone: '(11) 99876-5432',
+      whatsapp: '(11) 98765-4321',
+      email: 'ANA@EXAMPLE.COM ',
+      cpf: '123.456.789-01',
+      birthDate: '1990-05-10',
+      notes: '  Cliente recorrente  ',
+    });
+
+    expect(db.customer.create).toHaveBeenCalledWith({
+      data: {
+        barbershopId: 'shop-1',
+        name: 'Ana Souza',
+        phone: '11998765432',
+        whatsapp: '11987654321',
+        email: 'ana@example.com',
+        cpf: '12345678901',
+        birthDate: new Date('1990-05-10T00:00:00.000Z'),
+        notes: 'Cliente recorrente',
+      },
+    });
+  });
+
+  it('rejeita telefone sem DDD válido', async () => {
+    expect(() => service.createCustomer({ name: 'Ana', phone: '9876-5432' })).toThrow(
+      'Informe um telefone com DDD válido',
+    );
+    expect(db.customer.create).not.toHaveBeenCalled();
   });
 
   it('isola a agenda pelo tenant', async () => {

@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
 import {
+  CreateCustomerDto,
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
   CreateEmployeeScheduleBlockDto,
@@ -38,6 +39,32 @@ export class DataService {
       include: { _count: { select: { appointments: true } } },
       orderBy: { name: 'asc' },
     });
+  }
+
+  createCustomer(dto: CreateCustomerDto) {
+    const phone = this.normalizePhone(dto.phone);
+    const whatsapp = dto.whatsapp ? this.normalizePhone(dto.whatsapp) : null;
+
+    return this.db.customer.create({
+      data: {
+        barbershopId: this.tenant.barbershopId,
+        name: dto.name.trim(),
+        phone,
+        whatsapp,
+        email: dto.email?.trim().toLowerCase() || null,
+        cpf: dto.cpf?.replace(/\D/g, '') || null,
+        birthDate: dto.birthDate ? this.parseDateOnly(dto.birthDate) : null,
+        notes: dto.notes?.trim() || null,
+      },
+    });
+  }
+
+  private normalizePhone(value: string) {
+    const phone = value.replace(/\D/g, '');
+    if (phone.length < 10 || phone.length > 11) {
+      throw new BadRequestException('Informe um telefone com DDD válido');
+    }
+    return phone;
   }
 
   async employees(query: ListEmployeesQuery = new ListEmployeesQuery()) {

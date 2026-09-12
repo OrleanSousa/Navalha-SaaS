@@ -20,6 +20,7 @@ import { memoryStorage } from 'multer';
 import { DataService } from './data.service';
 import { AvailabilityService } from './availability.service';
 import {
+  CreateCustomerDto,
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
   CreateEmployeeScheduleBlockDto,
@@ -49,6 +50,12 @@ export class DataController {
   @RequirePermissions(Permissions.CUSTOMERS_READ)
   customers() {
     return this.data.customers();
+  }
+
+  @Post('customers')
+  @RequirePermissions(Permissions.CUSTOMERS_CREATE)
+  createCustomer(@Body() dto: CreateCustomerDto) {
+    return this.data.createCustomer(dto);
   }
 
   @Get('employees')
