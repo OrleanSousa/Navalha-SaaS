@@ -14,6 +14,7 @@ import { TenantContext } from './auth-context';
 import {
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
+  CreateEmployeeScheduleBlockDto,
   CreateEmployeeDto,
   CreateEmployeeAccessDto,
   EmployeeStatusFilter,
@@ -618,6 +619,27 @@ export class DataService {
         startAt,
         endAt,
         allDay: true,
+        reason: dto.reason?.trim() || null,
+      },
+    });
+  }
+
+  async createEmployeeScheduleBlock(employeeId: string, dto: CreateEmployeeScheduleBlockDto) {
+    const employee = await this.findTenantEmployee(employeeId);
+    const startAt = new Date(dto.startAt);
+    const endAt = new Date(dto.endAt);
+    if (endAt <= startAt) {
+      throw new BadRequestException('O fim do bloqueio deve ser posterior ao início');
+    }
+
+    return this.db.employeeUnavailability.create({
+      data: {
+        barbershopId: this.tenant.barbershopId,
+        employeeId: employee.id,
+        type: 'BLOCK',
+        startAt,
+        endAt,
+        allDay: false,
         reason: dto.reason?.trim() || null,
       },
     });

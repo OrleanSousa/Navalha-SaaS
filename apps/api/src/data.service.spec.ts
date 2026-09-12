@@ -711,6 +711,41 @@ describe('DataService tenant isolation', () => {
     expect(db.employeeUnavailability.create).not.toHaveBeenCalled();
   });
 
+  it('cadastra bloqueio pontual com horário', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.employeeUnavailability.create.mockResolvedValue({ id: 'block-1' });
+
+    await service.createEmployeeScheduleBlock('employee-1', {
+      startAt: '2026-09-20T13:00:00.000Z',
+      endAt: '2026-09-20T14:30:00.000Z',
+      reason: '  Compromisso  ',
+    });
+
+    expect(db.employeeUnavailability.create).toHaveBeenCalledWith({
+      data: {
+        barbershopId: 'shop-1',
+        employeeId: 'employee-1',
+        type: 'BLOCK',
+        startAt: new Date('2026-09-20T13:00:00.000Z'),
+        endAt: new Date('2026-09-20T14:30:00.000Z'),
+        allDay: false,
+        reason: 'Compromisso',
+      },
+    });
+  });
+
+  it('rejeita bloqueio pontual sem duração positiva', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+
+    await expect(
+      service.createEmployeeScheduleBlock('employee-1', {
+        startAt: '2026-09-20T14:30:00.000Z',
+        endAt: '2026-09-20T14:30:00.000Z',
+      }),
+    ).rejects.toThrow('O fim do bloqueio deve ser posterior ao início');
+    expect(db.employeeUnavailability.create).not.toHaveBeenCalled();
+  });
+
   it('exclui somente indisponibilidade do colaborador e tenant autenticados', async () => {
     db.employeeUnavailability.findFirst.mockResolvedValue({ id: 'day-off-1' });
 

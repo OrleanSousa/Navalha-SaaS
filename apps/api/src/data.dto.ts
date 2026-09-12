@@ -194,3 +194,16 @@ export class CreateEmployeeAbsenceDto {
   @MaxLength(300)
   reason?: string;
 }
+
+export class CreateEmployeeScheduleBlockDto {
+  @IsDateString()
+  startAt: string;
+
+  @IsDateString()
+  endAt: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}

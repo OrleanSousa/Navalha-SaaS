@@ -21,6 +21,7 @@ import { DataService } from './data.service';
 import {
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
+  CreateEmployeeScheduleBlockDto,
   CreateEmployeeDto,
   CreateWorkScheduleDto,
   CreateEmployeeAccessDto,
@@ -152,6 +153,15 @@ export class DataController {
   @RequirePermissions(Permissions.EMPLOYEES_UNAVAILABILITY)
   createEmployeeAbsence(@Param('id') id: string, @Body() dto: CreateEmployeeAbsenceDto) {
     return this.data.createEmployeeAbsence(id, dto);
+  }
+
+  @Post('employees/:id/unavailabilities/block')
+  @RequirePermissions(Permissions.EMPLOYEES_UNAVAILABILITY)
+  createEmployeeScheduleBlock(
+    @Param('id') id: string,
+    @Body() dto: CreateEmployeeScheduleBlockDto,
+  ) {
+    return this.data.createEmployeeScheduleBlock(id, dto);
   }
 
   @Delete('employees/:id/unavailabilities/:unavailabilityId')
