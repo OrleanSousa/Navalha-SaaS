@@ -176,7 +176,30 @@ export class DataService {
       where: { id, barbershopId: this.tenant.barbershopId },
     });
     if (!customer) throw new NotFoundException('Cliente não encontrado');
-    return { customer };
+    const serviceHistory = await this.db.appointment.findMany({
+      where: {
+        barbershopId: this.tenant.barbershopId,
+        customerId: customer.id,
+        status: 'COMPLETED',
+      },
+      select: {
+        id: true,
+        startAt: true,
+        endAt: true,
+        price: true,
+        employee: { select: { id: true, name: true } },
+        services: {
+          select: {
+            id: true,
+            price: true,
+            durationMinutes: true,
+            service: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { startAt: 'desc' },
+    });
+    return { customer, serviceHistory };
   }
 
   private async validateCustomerDuplicates(phone: string, cpf: string | null, excludeId?: string) {

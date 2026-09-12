@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft, CalendarDays, FileText, Mail, Phone, UserRound } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
-import { api } from '../lib/api';
+import { api, money } from '../lib/api';
 
 type CustomerDetailsResponse = {
   customer: {
@@ -16,6 +16,18 @@ type CustomerDetailsResponse = {
     deletedAt?: string | null;
     createdAt: string;
   };
+  serviceHistory: Array<{
+    id: string;
+    startAt: string;
+    price: string | number;
+    employee: { id: string; name: string };
+    services: Array<{
+      id: string;
+      price: string | number;
+      durationMinutes: number;
+      service: { id: string; name: string };
+    }>;
+  }>;
 };
 
 function formatDate(value?: string | null) {
@@ -110,6 +122,55 @@ export function CustomerDetails() {
           <h3>Observações</h3>
           <p>{customer.notes || 'Nenhuma observação cadastrada.'}</p>
         </div>
+      </section>
+
+      <section className="employee-detail-section">
+        <div className="detail-section-head">
+          <div>
+            <h3>Histórico de serviços</h3>
+            <p>Atendimentos concluídos para este cliente.</p>
+          </div>
+          <span>{data.serviceHistory.length} atendimentos</span>
+        </div>
+        {!data.serviceHistory.length ? (
+          <p className="detail-empty">Nenhum serviço concluído.</p>
+        ) : (
+          <div className="customer-history-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Serviços</th>
+                  <th>Profissional</th>
+                  <th>Duração</th>
+                  <th>Valor</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.serviceHistory.map((appointment) => (
+                  <tr key={appointment.id}>
+                    <td>
+                      {new Intl.DateTimeFormat('pt-BR', {
+                        dateStyle: 'short',
+                        timeStyle: 'short',
+                      }).format(new Date(appointment.startAt))}
+                    </td>
+                    <td>{appointment.services.map(({ service }) => service.name).join(', ')}</td>
+                    <td>{appointment.employee.name}</td>
+                    <td>
+                      {appointment.services.reduce(
+                        (total, item) => total + item.durationMinutes,
+                        0,
+                      )}{' '}
+                      min
+                    </td>
+                    <td>{money(Number(appointment.price))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </div>
   );

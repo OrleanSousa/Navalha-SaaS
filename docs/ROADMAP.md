@@ -142,7 +142,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 6.5 Paginar e ordenar listagem
 - [x] 6.6 Validar duplicidade configurável de CPF/telefone
 - [x] 6.7 Criar página de detalhes
-- [ ] 6.8 Exibir histórico de serviços
+- [x] 6.8 Exibir histórico de serviços
 - [ ] 6.9 Exibir produtos comprados
 - [ ] 6.10 Calcular visitas, total gasto e último atendimento
 - [ ] 6.11 Exibir próximo agendamento
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Continuar a **Etapa 6** exibindo o histórico de serviços do cliente (item 6.8). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 6** exibindo os produtos comprados pelo cliente (item 6.9). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

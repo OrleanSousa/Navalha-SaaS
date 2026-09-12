@@ -284,6 +284,23 @@ describe('DataService tenant isolation', () => {
       where: { id: 'customer-1', barbershopId: 'shop-1' },
     });
     expect(result.customer.name).toBe('Ana');
+    expect(db.appointment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { barbershopId: 'shop-1', customerId: 'customer-1', status: 'COMPLETED' },
+      }),
+    );
+  });
+
+  it('retorna histórico de serviços concluídos em ordem recente', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1', name: 'Ana' });
+    db.appointment.findMany.mockResolvedValue([{ id: 'appointment-1' }]);
+
+    const result = await service.customerDetails('customer-1');
+
+    expect(result.serviceHistory).toEqual([{ id: 'appointment-1' }]);
+    expect(db.appointment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { startAt: 'desc' } }),
+    );
   });
 
   it('não revela ficha de cliente de outro tenant', async () => {
