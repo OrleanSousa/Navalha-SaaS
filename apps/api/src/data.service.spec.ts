@@ -45,6 +45,10 @@ describe('DataService tenant isolation', () => {
       subscription: {
         findUnique: jest.fn().mockResolvedValue({ plan: { maxUsers: 0 } }),
       },
+      setting: {
+        findUnique: jest.fn().mockResolvedValue(null),
+        upsert: jest.fn(),
+      },
       service: { findMany: jest.fn().mockResolvedValue([]) },
       product: { findMany: jest.fn().mockResolvedValue([]) },
       appointment: {
@@ -117,14 +121,16 @@ describe('DataService tenant isolation', () => {
   });
 
   it('rejeita telefone sem DDD válido', async () => {
-    expect(() => service.createCustomer({ name: 'Ana', phone: '9876-5432' })).toThrow(
+    await expect(service.createCustomer({ name: 'Ana', phone: '9876-5432' })).rejects.toThrow(
       'Informe um telefone com DDD válido',
     );
     expect(db.customer.create).not.toHaveBeenCalled();
   });
 
   it('edita cliente normalizando os campos de contato', async () => {
-    db.customer.findFirst.mockResolvedValue({ id: 'customer-1' });
+    db.customer.findFirst
+      .mockResolvedValueOnce({ id: 'customer-1', phone: '11999999999', cpf: null })
+      .mockResolvedValueOnce(null);
     db.customer.update.mockResolvedValue({ id: 'customer-1' });
 
     await service.updateCustomer('customer-1', {
@@ -211,6 +217,62 @@ describe('DataService tenant isolation', () => {
       total: 12,
       pages: 3,
     });
+  });
+
+  it.each([
+    ['phone', { phone: '11999990000', cpf: null }, 'Já existe um cliente com este telefone'],
+    ['cpf', { phone: '11888880000', cpf: '12345678901' }, 'Já existe um cliente com este CPF'],
+  ])(
+    'rejeita cliente com %s duplicado quando a política bloqueia',
+    async (_, duplicate, message) => {
+      db.customer.findFirst.mockResolvedValue(duplicate);
+
+      await expect(
+        service.createCustomer({
+          name: 'Cliente duplicado',
+          phone: '11999990000',
+          cpf: '123.456.789-01',
+        }),
+      ).rejects.toThrow(message);
+      expect(db.customer.create).not.toHaveBeenCalled();
+    },
+  );
+
+  it('permite duplicidade liberada pela configuração do tenant', async () => {
+    db.setting.findUnique.mockResolvedValue({
+      allowDuplicateCustomerPhone: true,
+      allowDuplicateCustomerCpf: true,
+    });
+    db.customer.create.mockResolvedValue({ id: 'customer-2' });
+
+    await service.createCustomer({
+      name: 'Cliente permitido',
+      phone: '11999990000',
+      cpf: '12345678901',
+    });
+
+    expect(db.customer.findFirst).not.toHaveBeenCalled();
+    expect(db.customer.create).toHaveBeenCalled();
+  });
+
+  it('salva a política de duplicidade somente no tenant autenticado', async () => {
+    db.setting.upsert.mockResolvedValue({
+      allowDuplicateCustomerPhone: true,
+      allowDuplicateCustomerCpf: false,
+    });
+
+    const result = await service.updateCustomerDuplicatePolicy({
+      allowDuplicatePhone: true,
+      allowDuplicateCpf: false,
+    });
+
+    expect(db.setting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { barbershopId: 'shop-1' },
+        create: expect.objectContaining({ barbershopId: 'shop-1' }),
+      }),
+    );
+    expect(result).toEqual({ allowDuplicatePhone: true, allowDuplicateCpf: false });
   });
 
   it('isola a agenda pelo tenant', async () => {

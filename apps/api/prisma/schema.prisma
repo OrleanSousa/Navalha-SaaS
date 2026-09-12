@@ -739,13 +739,15 @@ model AuditLog {
 }
 
 model Setting {
-  id                 String     @id @default(uuid())
-  barbershopId       String     @unique
-  currency           String     @default("BRL")
-  timezone           String     @default("America/Sao_Paulo")
-  allowNegativeStock Boolean    @default(false)
-  publicBooking      Boolean    @default(true)
-  openingHours       Json?
-  barbershop         Barbershop @relation(fields: [barbershopId], references: [id])
-  updatedAt          DateTime   @updatedAt
+  id                          String     @id @default(uuid())
+  barbershopId                String     @unique
+  currency                    String     @default("BRL")
+  timezone                    String     @default("America/Sao_Paulo")
+  allowNegativeStock          Boolean    @default(false)
+  publicBooking               Boolean    @default(true)
+  allowDuplicateCustomerPhone Boolean    @default(false)
+  allowDuplicateCustomerCpf   Boolean    @default(false)
+  openingHours                Json?
+  barbershop                  Barbershop @relation(fields: [barbershopId], references: [id])
+  updatedAt                   DateTime   @updatedAt
 }

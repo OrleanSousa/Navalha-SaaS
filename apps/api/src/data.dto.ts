@@ -116,6 +116,14 @@ export class SetCustomerArchiveDto {
   archived: boolean;
 }
 
+export class UpdateCustomerDuplicatePolicyDto {
+  @IsBoolean()
+  allowDuplicatePhone: boolean;
+
+  @IsBoolean()
+  allowDuplicateCpf: boolean;
+}
+
 export class ListEmployeesQuery {
   @IsOptional()
   @Type(() => Number)

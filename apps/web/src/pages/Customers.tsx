@@ -9,6 +9,7 @@ import {
   RotateCcw,
   Save,
   Search,
+  Settings2,
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
@@ -59,6 +60,7 @@ export function Customers() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState('NAME:ASC');
+  const [showDuplicatePolicy, setShowDuplicatePolicy] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const { data } = useQuery<CustomerPage>({
     queryKey: ['customers', { status, search, page, sort }],
@@ -80,6 +82,14 @@ export function Customers() {
 
   useEffect(() => setPage(1), [search, status, sort]);
 
+  const { data: duplicatePolicy } = useQuery<{
+    allowDuplicatePhone: boolean;
+    allowDuplicateCpf: boolean;
+  }>({
+    queryKey: ['customer-duplicate-policy'],
+    queryFn: async () => (await api.get('/customers/settings/duplicates')).data,
+  });
+
   const setArchive = useMutation({
     mutationFn: ({ id, archived }: { id: string; archived: boolean }) =>
       api.patch(`/customers/${id}/archive`, { archived }),
@@ -89,6 +99,17 @@ export function Customers() {
     },
     onError: (error: any) =>
       toast.error(error.response?.data?.message || 'Não foi possível alterar o cliente'),
+  });
+
+  const updateDuplicatePolicy = useMutation({
+    mutationFn: (policy: { allowDuplicatePhone: boolean; allowDuplicateCpf: boolean }) =>
+      api.patch('/customers/settings/duplicates', policy),
+    onSuccess: async () => {
+      toast.success('Política de duplicidade atualizada');
+      await queryClient.invalidateQueries({ queryKey: ['customer-duplicate-policy'] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível atualizar a política'),
   });
 
   const saveCustomer = useMutation({
@@ -142,19 +163,67 @@ export function Customers() {
           <h2>Clientes</h2>
           <p>Gerencie seus clientes e acompanhe o histórico.</p>
         </div>
-        {can(Permissions.CUSTOMERS_CREATE) && !showForm && (
-          <button
-            className="primary"
-            onClick={() => {
-              setEditingId(undefined);
-              setForm(emptyForm);
-              setShowForm(true);
-            }}
-          >
-            <Plus /> Novo cliente
-          </button>
-        )}
+        <div className="module-actions">
+          {can(Permissions.CUSTOMERS_UPDATE) && (
+            <button
+              className="outline"
+              title="Política de duplicidade"
+              onClick={() => setShowDuplicatePolicy((current) => !current)}
+            >
+              <Settings2 /> Duplicidade
+            </button>
+          )}
+          {can(Permissions.CUSTOMERS_CREATE) && !showForm && (
+            <button
+              className="primary"
+              onClick={() => {
+                setEditingId(undefined);
+                setForm(emptyForm);
+                setShowForm(true);
+              }}
+            >
+              <Plus /> Novo cliente
+            </button>
+          )}
+        </div>
       </div>
+
+      {showDuplicatePolicy && duplicatePolicy && (
+        <div className="card customer-duplicate-policy">
+          <div>
+            <h3>Política de duplicidade</h3>
+            <p>Defina quais identificadores podem se repetir no cadastro.</p>
+          </div>
+          <label>
+            <input
+              type="checkbox"
+              checked={duplicatePolicy.allowDuplicatePhone}
+              disabled={updateDuplicatePolicy.isPending}
+              onChange={(event) =>
+                updateDuplicatePolicy.mutate({
+                  ...duplicatePolicy,
+                  allowDuplicatePhone: event.target.checked,
+                })
+              }
+            />
+            Permitir telefone duplicado
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={duplicatePolicy.allowDuplicateCpf}
+              disabled={updateDuplicatePolicy.isPending}
+              onChange={(event) =>
+                updateDuplicatePolicy.mutate({
+                  ...duplicatePolicy,
+                  allowDuplicateCpf: event.target.checked,
+                })
+              }
+            />
+            Permitir CPF duplicado
+          </label>
+        </div>
+      )}
 
       {showForm && (
         <form

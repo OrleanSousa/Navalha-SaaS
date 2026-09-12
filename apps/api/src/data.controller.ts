@@ -35,6 +35,7 @@ import {
   SetEmployeeCommissionDto,
   UpdateEmployeeAccessDto,
   UpdateCustomerDto,
+  UpdateCustomerDuplicatePolicyDto,
   UpdateEmployeeDto,
   UpdateWorkScheduleDto,
 } from './data.dto';
@@ -71,6 +72,18 @@ export class DataController {
   @RequirePermissions(Permissions.CUSTOMERS_STATUS)
   setCustomerArchive(@Param('id') id: string, @Body() dto: SetCustomerArchiveDto) {
     return this.data.setCustomerArchive(id, dto.archived);
+  }
+
+  @Get('customers/settings/duplicates')
+  @RequirePermissions(Permissions.CUSTOMERS_READ)
+  customerDuplicatePolicy() {
+    return this.data.customerDuplicatePolicy();
+  }
+
+  @Patch('customers/settings/duplicates')
+  @RequirePermissions(Permissions.CUSTOMERS_UPDATE)
+  updateCustomerDuplicatePolicy(@Body() dto: UpdateCustomerDuplicatePolicyDto) {
+    return this.data.updateCustomerDuplicatePolicy(dto);
   }
 
   @Get('employees')

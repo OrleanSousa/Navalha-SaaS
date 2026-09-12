@@ -26,6 +26,7 @@ import {
   SortDirection,
   UpdateEmployeeDto,
   UpdateCustomerDto,
+  UpdateCustomerDuplicatePolicyDto,
   UpdateEmployeeAccessDto,
   CreateWorkScheduleDto,
   UpdateWorkScheduleDto,
@@ -72,9 +73,11 @@ export class DataService {
     return { items, page, limit, total, pages: Math.ceil(total / limit) };
   }
 
-  createCustomer(dto: CreateCustomerDto) {
+  async createCustomer(dto: CreateCustomerDto) {
     const phone = this.normalizePhone(dto.phone);
     const whatsapp = dto.whatsapp ? this.normalizePhone(dto.whatsapp) : null;
+    const cpf = dto.cpf?.replace(/\D/g, '') || null;
+    await this.validateCustomerDuplicates(phone, cpf);
 
     return this.db.customer.create({
       data: {
@@ -83,7 +86,7 @@ export class DataService {
         phone,
         whatsapp,
         email: dto.email?.trim().toLowerCase() || null,
-        cpf: dto.cpf?.replace(/\D/g, '') || null,
+        cpf,
         birthDate: dto.birthDate ? this.parseDateOnly(dto.birthDate) : null,
         notes: dto.notes?.trim() || null,
       },
@@ -93,15 +96,19 @@ export class DataService {
   async updateCustomer(id: string, dto: UpdateCustomerDto) {
     const customer = await this.db.customer.findFirst({
       where: { id, barbershopId: this.tenant.barbershopId, deletedAt: null },
-      select: { id: true },
+      select: { id: true, phone: true, cpf: true },
     });
     if (!customer) throw new NotFoundException('Cliente não encontrado');
+
+    const phone = dto.phone === undefined ? customer.phone : this.normalizePhone(dto.phone);
+    const cpf = dto.cpf === undefined ? customer.cpf : dto.cpf?.replace(/\D/g, '') || null;
+    await this.validateCustomerDuplicates(phone, cpf, customer.id);
 
     return this.db.customer.update({
       where: { id: customer.id },
       data: {
         name: dto.name?.trim(),
-        phone: dto.phone === undefined ? undefined : this.normalizePhone(dto.phone),
+        phone: dto.phone === undefined ? undefined : phone,
         whatsapp:
           dto.whatsapp === undefined
             ? undefined
@@ -109,7 +116,7 @@ export class DataService {
               ? this.normalizePhone(dto.whatsapp)
               : null,
         email: dto.email === undefined ? undefined : dto.email?.trim().toLowerCase() || null,
-        cpf: dto.cpf === undefined ? undefined : dto.cpf?.replace(/\D/g, '') || null,
+        cpf: dto.cpf === undefined ? undefined : cpf,
         birthDate:
           dto.birthDate === undefined
             ? undefined
@@ -131,6 +138,61 @@ export class DataService {
       where: { id: customer.id },
       data: { deletedAt: archived ? new Date() : null },
     });
+  }
+
+  async customerDuplicatePolicy() {
+    const settings = await this.db.setting.findUnique({
+      where: { barbershopId: this.tenant.barbershopId },
+      select: { allowDuplicateCustomerPhone: true, allowDuplicateCustomerCpf: true },
+    });
+    return {
+      allowDuplicatePhone: settings?.allowDuplicateCustomerPhone ?? false,
+      allowDuplicateCpf: settings?.allowDuplicateCustomerCpf ?? false,
+    };
+  }
+
+  async updateCustomerDuplicatePolicy(dto: UpdateCustomerDuplicatePolicyDto) {
+    const settings = await this.db.setting.upsert({
+      where: { barbershopId: this.tenant.barbershopId },
+      create: {
+        barbershopId: this.tenant.barbershopId,
+        allowDuplicateCustomerPhone: dto.allowDuplicatePhone,
+        allowDuplicateCustomerCpf: dto.allowDuplicateCpf,
+      },
+      update: {
+        allowDuplicateCustomerPhone: dto.allowDuplicatePhone,
+        allowDuplicateCustomerCpf: dto.allowDuplicateCpf,
+      },
+      select: { allowDuplicateCustomerPhone: true, allowDuplicateCustomerCpf: true },
+    });
+    return {
+      allowDuplicatePhone: settings.allowDuplicateCustomerPhone,
+      allowDuplicateCpf: settings.allowDuplicateCustomerCpf,
+    };
+  }
+
+  private async validateCustomerDuplicates(phone: string, cpf: string | null, excludeId?: string) {
+    const policy = await this.customerDuplicatePolicy();
+    const conditions: Prisma.CustomerWhereInput[] = [];
+    if (!policy.allowDuplicatePhone) conditions.push({ phone });
+    if (cpf && !policy.allowDuplicateCpf) conditions.push({ cpf });
+    if (!conditions.length) return;
+
+    const duplicate = await this.db.customer.findFirst({
+      where: {
+        barbershopId: this.tenant.barbershopId,
+        ...(excludeId && { id: { not: excludeId } }),
+        OR: conditions,
+      },
+      select: { phone: true, cpf: true },
+    });
+    if (!duplicate) return;
+    if (!policy.allowDuplicatePhone && duplicate.phone === phone) {
+      throw new ConflictException('Já existe um cliente com este telefone');
+    }
+    if (cpf && !policy.allowDuplicateCpf && duplicate.cpf === cpf) {
+      throw new ConflictException('Já existe um cliente com este CPF');
+    }
   }
 
   private normalizePhone(value: string) {
