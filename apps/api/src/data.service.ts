@@ -21,6 +21,7 @@ import {
   EmployeeStatusFilter,
   ListEmployeesQuery,
   UpdateEmployeeDto,
+  UpdateCustomerDto,
   UpdateEmployeeAccessDto,
   CreateWorkScheduleDto,
   UpdateWorkScheduleDto,
@@ -55,6 +56,37 @@ export class DataService {
         cpf: dto.cpf?.replace(/\D/g, '') || null,
         birthDate: dto.birthDate ? this.parseDateOnly(dto.birthDate) : null,
         notes: dto.notes?.trim() || null,
+      },
+    });
+  }
+
+  async updateCustomer(id: string, dto: UpdateCustomerDto) {
+    const customer = await this.db.customer.findFirst({
+      where: { id, barbershopId: this.tenant.barbershopId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException('Cliente não encontrado');
+
+    return this.db.customer.update({
+      where: { id: customer.id },
+      data: {
+        name: dto.name?.trim(),
+        phone: dto.phone === undefined ? undefined : this.normalizePhone(dto.phone),
+        whatsapp:
+          dto.whatsapp === undefined
+            ? undefined
+            : dto.whatsapp
+              ? this.normalizePhone(dto.whatsapp)
+              : null,
+        email: dto.email === undefined ? undefined : dto.email?.trim().toLowerCase() || null,
+        cpf: dto.cpf === undefined ? undefined : dto.cpf?.replace(/\D/g, '') || null,
+        birthDate:
+          dto.birthDate === undefined
+            ? undefined
+            : dto.birthDate
+              ? this.parseDateOnly(dto.birthDate)
+              : null,
+        notes: dto.notes === undefined ? undefined : dto.notes?.trim() || null,
       },
     });
   }

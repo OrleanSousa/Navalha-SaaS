@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { MoreHorizontal, Phone, Plus, Save, Search, X } from 'lucide-react';
+import { Pencil, Phone, Plus, Save, Search, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { api, money } from '../lib/api';
@@ -34,27 +34,56 @@ export function Customers() {
   const { can } = useAuth();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string>();
   const [form, setForm] = useState(emptyForm);
   const { data = [] } = useQuery<Customer[]>({
     queryKey: ['customers'],
     queryFn: async () => (await api.get('/customers')).data,
   });
 
-  const createCustomer = useMutation({
-    mutationFn: () =>
-      api.post(
+  const saveCustomer = useMutation({
+    mutationFn: async () => {
+      if (editingId) {
+        await api.patch(
+          `/customers/${editingId}`,
+          Object.fromEntries(Object.entries(form).map(([key, value]) => [key, value || null])),
+        );
+        return;
+      }
+      await api.post(
         '/customers',
         Object.fromEntries(Object.entries(form).filter(([, value]) => Boolean(value))),
-      ),
+      );
+    },
     onSuccess: async () => {
-      toast.success('Cliente cadastrado');
-      setShowForm(false);
-      setForm(emptyForm);
+      toast.success(editingId ? 'Cliente atualizado' : 'Cliente cadastrado');
+      closeForm();
       await queryClient.invalidateQueries({ queryKey: ['customers'] });
     },
     onError: (error: any) =>
-      toast.error(error.response?.data?.message || 'Não foi possível cadastrar o cliente'),
+      toast.error(error.response?.data?.message || 'Não foi possível salvar o cliente'),
   });
+
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(undefined);
+    setForm(emptyForm);
+  }
+
+  function editCustomer(customer: Customer) {
+    setEditingId(customer.id);
+    setShowForm(true);
+    setForm({
+      name: customer.name,
+      phone: customer.phone,
+      whatsapp: customer.whatsapp || '',
+      email: customer.email || '',
+      cpf: customer.cpf || '',
+      birthDate: customer.birthDate?.slice(0, 10) || '',
+      notes: customer.notes || '',
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
 
   return (
     <div className="page customers-module">
@@ -64,7 +93,14 @@ export function Customers() {
           <p>Gerencie seus clientes e acompanhe o histórico.</p>
         </div>
         {can(Permissions.CUSTOMERS_CREATE) && !showForm && (
-          <button className="primary" onClick={() => setShowForm(true)}>
+          <button
+            className="primary"
+            onClick={() => {
+              setEditingId(undefined);
+              setForm(emptyForm);
+              setShowForm(true);
+            }}
+          >
             <Plus /> Novo cliente
           </button>
         )}
@@ -75,20 +111,15 @@ export function Customers() {
           className="card customer-form"
           onSubmit={(event) => {
             event.preventDefault();
-            createCustomer.mutate();
+            saveCustomer.mutate();
           }}
         >
           <div className="customer-form-head">
             <div>
-              <h3>Novo cliente</h3>
+              <h3>{editingId ? 'Editar cliente' : 'Novo cliente'}</h3>
               <p>Cadastre os dados de contato e identificação.</p>
             </div>
-            <button
-              className="icon"
-              type="button"
-              title="Fechar"
-              onClick={() => setShowForm(false)}
-            >
+            <button className="icon" type="button" title="Fechar" onClick={closeForm}>
               <X />
             </button>
           </div>
@@ -154,18 +185,11 @@ export function Customers() {
             />
           </label>
           <div className="customer-form-actions">
-            <button
-              className="outline"
-              type="button"
-              onClick={() => {
-                setShowForm(false);
-                setForm(emptyForm);
-              }}
-            >
+            <button className="outline" type="button" onClick={closeForm}>
               Cancelar
             </button>
-            <button className="primary" type="submit" disabled={createCustomer.isPending}>
-              <Save /> {createCustomer.isPending ? 'Salvando...' : 'Salvar cliente'}
+            <button className="primary" type="submit" disabled={saveCustomer.isPending}>
+              <Save /> {saveCustomer.isPending ? 'Salvando...' : 'Salvar cliente'}
             </button>
           </div>
         </form>
@@ -212,9 +236,15 @@ export function Customers() {
                     : '—'}
                 </td>
                 <td>
-                  <button className="icon" title="Ações">
-                    <MoreHorizontal />
-                  </button>
+                  {can(Permissions.CUSTOMERS_UPDATE) && (
+                    <button
+                      className="icon"
+                      title="Editar cliente"
+                      onClick={() => editCustomer(customer)}
+                    >
+                      <Pencil />
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}

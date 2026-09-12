@@ -32,6 +32,7 @@ import {
   SetEmployeeStatusDto,
   SetEmployeeCommissionDto,
   UpdateEmployeeAccessDto,
+  UpdateCustomerDto,
   UpdateEmployeeDto,
   UpdateWorkScheduleDto,
 } from './data.dto';
@@ -56,6 +57,12 @@ export class DataController {
   @RequirePermissions(Permissions.CUSTOMERS_CREATE)
   createCustomer(@Body() dto: CreateCustomerDto) {
     return this.data.createCustomer(dto);
+  }
+
+  @Patch('customers/:id')
+  @RequirePermissions(Permissions.CUSTOMERS_UPDATE)
+  updateCustomer(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
+    return this.data.updateCustomer(id, dto);
   }
 
   @Get('employees')

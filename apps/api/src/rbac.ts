@@ -14,6 +14,7 @@ import { PrismaService } from './prisma.service';
 export const Permissions = {
   DASHBOARD_READ: 'dashboard.read',
   CUSTOMERS_READ: 'customers.read',
+  CUSTOMERS_UPDATE: 'customers.update',
   EMPLOYEES_READ: 'employees.read',
   EMPLOYEES_CREATE: 'employees.create',
   EMPLOYEES_UPDATE: 'employees.update',
@@ -41,6 +42,7 @@ export const PERMISSION_CATALOG: ReadonlyArray<{
 }> = [
   { key: Permissions.DASHBOARD_READ, description: 'Visualizar o dashboard' },
   { key: Permissions.CUSTOMERS_READ, description: 'Visualizar clientes' },
+  { key: Permissions.CUSTOMERS_UPDATE, description: 'Editar clientes' },
   { key: Permissions.EMPLOYEES_READ, description: 'Visualizar colaboradores' },
   { key: Permissions.EMPLOYEES_CREATE, description: 'Cadastrar colaboradores' },
   { key: Permissions.EMPLOYEES_UPDATE, description: 'Editar colaboradores' },

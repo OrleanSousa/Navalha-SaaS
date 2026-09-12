@@ -4,6 +4,7 @@ const db = new PrismaClient();
 const permissionCatalog = [
   ['dashboard.read', 'Visualizar o dashboard'],
   ['customers.read', 'Visualizar clientes'],
+  ['customers.update', 'Editar clientes'],
   ['employees.read', 'Visualizar colaboradores'],
   ['employees.create', 'Cadastrar colaboradores'],
   ['employees.update', 'Editar colaboradores'],

@@ -15,7 +15,12 @@ describe('DataService tenant isolation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     db = {
-      customer: { findMany: jest.fn().mockResolvedValue([]), create: jest.fn() },
+      customer: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
       employee: {
         findMany: jest.fn().mockResolvedValue([]),
         count: jest.fn().mockResolvedValue(0),
@@ -115,6 +120,37 @@ describe('DataService tenant isolation', () => {
       'Informe um telefone com DDD válido',
     );
     expect(db.customer.create).not.toHaveBeenCalled();
+  });
+
+  it('edita cliente normalizando os campos de contato', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1' });
+    db.customer.update.mockResolvedValue({ id: 'customer-1' });
+
+    await service.updateCustomer('customer-1', {
+      name: '  Ana Atualizada  ',
+      phone: '(21) 99876-5432',
+      whatsapp: '',
+      email: 'NOVA@EXAMPLE.COM',
+    });
+
+    expect(db.customer.update).toHaveBeenCalledWith({
+      where: { id: 'customer-1' },
+      data: expect.objectContaining({
+        name: 'Ana Atualizada',
+        phone: '21998765432',
+        whatsapp: null,
+        email: 'nova@example.com',
+      }),
+    });
+  });
+
+  it('não edita cliente de outro tenant', async () => {
+    db.customer.findFirst.mockResolvedValue(null);
+
+    await expect(service.updateCustomer('customer-other', { name: 'Outro' })).rejects.toThrow(
+      'Cliente não encontrado',
+    );
+    expect(db.customer.update).not.toHaveBeenCalled();
   });
 
   it('isola a agenda pelo tenant', async () => {

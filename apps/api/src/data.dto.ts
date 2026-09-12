@@ -61,6 +61,8 @@ export class CreateCustomerDto {
   notes?: string;
 }
 
+export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {}
+
 export class ListEmployeesQuery {
   @IsOptional()
   @Type(() => Number)
