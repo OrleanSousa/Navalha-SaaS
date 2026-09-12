@@ -153,6 +153,23 @@ describe('DataService tenant isolation', () => {
     expect(db.customer.update).not.toHaveBeenCalled();
   });
 
+  it('arquiva e restaura cliente sem remover seu histórico', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1' });
+    db.customer.update.mockResolvedValue({ id: 'customer-1' });
+
+    await service.setCustomerArchive('customer-1', true);
+    expect(db.customer.update).toHaveBeenLastCalledWith({
+      where: { id: 'customer-1' },
+      data: { deletedAt: expect.any(Date) },
+    });
+
+    await service.setCustomerArchive('customer-1', false);
+    expect(db.customer.update).toHaveBeenLastCalledWith({
+      where: { id: 'customer-1' },
+      data: { deletedAt: null },
+    });
+  });
+
   it('isola a agenda pelo tenant', async () => {
     await service.appointments();
 

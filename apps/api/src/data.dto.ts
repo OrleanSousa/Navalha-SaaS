@@ -63,6 +63,23 @@ export class CreateCustomerDto {
 
 export class UpdateCustomerDto extends PartialType(CreateCustomerDto) {}
 
+export enum CustomerStatusFilter {
+  ACTIVE = 'ACTIVE',
+  ARCHIVED = 'ARCHIVED',
+  ALL = 'ALL',
+}
+
+export class ListCustomersQuery {
+  @IsOptional()
+  @IsEnum(CustomerStatusFilter)
+  status = CustomerStatusFilter.ACTIVE;
+}
+
+export class SetCustomerArchiveDto {
+  @IsBoolean()
+  archived: boolean;
+}
+
 export class ListEmployeesQuery {
   @IsOptional()
   @Type(() => Number)

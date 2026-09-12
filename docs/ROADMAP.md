@@ -137,7 +137,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 - [x] 6.1 Criar cliente com telefone normalizado
 - [x] 6.2 Editar cliente
-- [ ] 6.3 Arquivar e restaurar cliente
+- [x] 6.3 Arquivar e restaurar cliente
 - [ ] 6.4 Buscar por nome, telefone e CPF
 - [ ] 6.5 Paginar e ordenar listagem
 - [ ] 6.6 Validar duplicidade configurável de CPF/telefone
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Continuar a **Etapa 6** permitindo arquivar e restaurar clientes (item 6.3). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 6** com a busca por nome, telefone e CPF (item 6.4). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

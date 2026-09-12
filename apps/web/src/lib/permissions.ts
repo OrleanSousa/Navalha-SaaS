@@ -2,6 +2,7 @@ export const Permissions = {
   DASHBOARD_READ: 'dashboard.read',
   CUSTOMERS_READ: 'customers.read',
   CUSTOMERS_UPDATE: 'customers.update',
+  CUSTOMERS_STATUS: 'customers.status',
   EMPLOYEES_READ: 'employees.read',
   EMPLOYEES_CREATE: 'employees.create',
   EMPLOYEES_UPDATE: 'employees.update',

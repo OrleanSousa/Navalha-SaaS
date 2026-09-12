@@ -5,6 +5,7 @@ const permissionCatalog = [
   ['dashboard.read', 'Visualizar o dashboard'],
   ['customers.read', 'Visualizar clientes'],
   ['customers.update', 'Editar clientes'],
+  ['customers.status', 'Arquivar e restaurar clientes'],
   ['employees.read', 'Visualizar colaboradores'],
   ['employees.create', 'Cadastrar colaboradores'],
   ['employees.update', 'Editar colaboradores'],

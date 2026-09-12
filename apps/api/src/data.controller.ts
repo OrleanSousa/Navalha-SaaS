@@ -29,6 +29,8 @@ import {
   EmployeeAvailabilityQuery,
   CreateEmployeeAccessDto,
   ListEmployeesQuery,
+  ListCustomersQuery,
+  SetCustomerArchiveDto,
   SetEmployeeStatusDto,
   SetEmployeeCommissionDto,
   UpdateEmployeeAccessDto,
@@ -49,8 +51,8 @@ export class DataController {
 
   @Get('customers')
   @RequirePermissions(Permissions.CUSTOMERS_READ)
-  customers() {
-    return this.data.customers();
+  customers(@Query() query: ListCustomersQuery) {
+    return this.data.customers(query);
   }
 
   @Post('customers')
@@ -63,6 +65,12 @@ export class DataController {
   @RequirePermissions(Permissions.CUSTOMERS_UPDATE)
   updateCustomer(@Param('id') id: string, @Body() dto: UpdateCustomerDto) {
     return this.data.updateCustomer(id, dto);
+  }
+
+  @Patch('customers/:id/archive')
+  @RequirePermissions(Permissions.CUSTOMERS_STATUS)
+  setCustomerArchive(@Param('id') id: string, @Body() dto: SetCustomerArchiveDto) {
+    return this.data.setCustomerArchive(id, dto.archived);
   }
 
   @Get('employees')

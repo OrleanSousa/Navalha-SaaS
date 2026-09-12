@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Phone, Plus, Save, Search, X } from 'lucide-react';
+import { Archive, Pencil, Phone, Plus, RotateCcw, Save, Search, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { api, money } from '../lib/api';
@@ -18,6 +18,7 @@ type Customer = {
   _count?: { appointments: number };
   totalSpent?: number;
   lastVisit?: string | null;
+  deletedAt?: string | null;
 };
 
 const emptyForm = {
@@ -35,10 +36,22 @@ export function Customers() {
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string>();
+  const [status, setStatus] = useState('ACTIVE');
   const [form, setForm] = useState(emptyForm);
   const { data = [] } = useQuery<Customer[]>({
-    queryKey: ['customers'],
-    queryFn: async () => (await api.get('/customers')).data,
+    queryKey: ['customers', status],
+    queryFn: async () => (await api.get('/customers', { params: { status } })).data,
+  });
+
+  const setArchive = useMutation({
+    mutationFn: ({ id, archived }: { id: string; archived: boolean }) =>
+      api.patch(`/customers/${id}/archive`, { archived }),
+    onSuccess: async (_, { archived }) => {
+      toast.success(archived ? 'Cliente arquivado' : 'Cliente restaurado');
+      await queryClient.invalidateQueries({ queryKey: ['customers'] });
+    },
+    onError: (error: any) =>
+      toast.error(error.response?.data?.message || 'Não foi possível alterar o cliente'),
   });
 
   const saveCustomer = useMutation({
@@ -201,6 +214,22 @@ export function Customers() {
             <Search />
             <input placeholder="Buscar por nome, telefone ou CPF..." />
           </label>
+          <div className="customer-status-filter">
+            {[
+              ['ACTIVE', 'Ativos'],
+              ['ARCHIVED', 'Arquivados'],
+              ['ALL', 'Todos'],
+            ].map(([value, label]) => (
+              <button
+                key={value}
+                className={status === value ? 'active' : ''}
+                type="button"
+                onClick={() => setStatus(value)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <span>{data.length} clientes cadastrados</span>
         </div>
         <table>
@@ -236,13 +265,25 @@ export function Customers() {
                     : '—'}
                 </td>
                 <td>
-                  {can(Permissions.CUSTOMERS_UPDATE) && (
+                  {!customer.deletedAt && can(Permissions.CUSTOMERS_UPDATE) && (
                     <button
                       className="icon"
                       title="Editar cliente"
                       onClick={() => editCustomer(customer)}
                     >
                       <Pencil />
+                    </button>
+                  )}
+                  {can(Permissions.CUSTOMERS_STATUS) && (
+                    <button
+                      className="icon"
+                      title={customer.deletedAt ? 'Restaurar cliente' : 'Arquivar cliente'}
+                      disabled={setArchive.isPending}
+                      onClick={() =>
+                        setArchive.mutate({ id: customer.id, archived: !customer.deletedAt })
+                      }
+                    >
+                      {customer.deletedAt ? <RotateCcw /> : <Archive />}
                     </button>
                   )}
                 </td>

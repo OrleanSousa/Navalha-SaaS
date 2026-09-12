@@ -13,6 +13,7 @@ import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
 import {
   CreateCustomerDto,
+  CustomerStatusFilter,
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
   CreateEmployeeScheduleBlockDto,
@@ -20,6 +21,7 @@ import {
   CreateEmployeeAccessDto,
   EmployeeStatusFilter,
   ListEmployeesQuery,
+  ListCustomersQuery,
   UpdateEmployeeDto,
   UpdateCustomerDto,
   UpdateEmployeeAccessDto,
@@ -34,9 +36,13 @@ export class DataService {
     private readonly tenant: TenantContext,
   ) {}
 
-  customers() {
+  customers(query: ListCustomersQuery = new ListCustomersQuery()) {
     return this.db.customer.findMany({
-      where: { barbershopId: this.tenant.barbershopId, deletedAt: null },
+      where: {
+        barbershopId: this.tenant.barbershopId,
+        ...(query.status === CustomerStatusFilter.ACTIVE && { deletedAt: null }),
+        ...(query.status === CustomerStatusFilter.ARCHIVED && { deletedAt: { not: null } }),
+      },
       include: { _count: { select: { appointments: true } } },
       orderBy: { name: 'asc' },
     });
@@ -88,6 +94,18 @@ export class DataService {
               : null,
         notes: dto.notes === undefined ? undefined : dto.notes?.trim() || null,
       },
+    });
+  }
+
+  async setCustomerArchive(id: string, archived: boolean) {
+    const customer = await this.db.customer.findFirst({
+      where: { id, barbershopId: this.tenant.barbershopId },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException('Cliente não encontrado');
+    return this.db.customer.update({
+      where: { id: customer.id },
+      data: { deletedAt: archived ? new Date() : null },
     });
   }
 
