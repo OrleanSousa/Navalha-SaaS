@@ -182,19 +182,19 @@ describe('Isolamento multi-tenant (e2e)', () => {
 
     const [responseA, responseB] = await Promise.all([
       request(app.getHttpServer())
-        .get(`/api/customers?barbershopId=${shopBId}`)
+        .get('/api/customers?status=ALL')
         .set('Authorization', `Bearer ${tokenA}`)
         .expect(200),
       request(app.getHttpServer())
-        .get(`/api/customers?barbershopId=${shopAId}`)
+        .get('/api/customers?status=ALL')
         .set('Authorization', `Bearer ${tokenB}`)
         .expect(200),
     ]);
 
-    expect(responseA.body.map((customer: { name: string }) => customer.name)).toEqual([
+    expect(responseA.body.items.map((customer: { name: string }) => customer.name)).toEqual([
       `Cliente A ${suffix}`,
     ]);
-    expect(responseB.body.map((customer: { name: string }) => customer.name)).toEqual([
+    expect(responseB.body.items.map((customer: { name: string }) => customer.name)).toEqual([
       `Cliente B ${suffix}`,
     ]);
   });
@@ -358,6 +358,104 @@ describe('Isolamento multi-tenant (e2e)', () => {
     } finally {
       await db.employeeUnavailability.deleteMany({ where: { id: { in: unavailabilityIds } } });
       await db.workSchedule.deleteMany({ where: { id: { in: scheduleIds } } });
+    }
+  });
+
+  it('valida CRUD, busca, paginação, permissões e isolamento de clientes', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    const tokenB = await login(`admin-b-${suffix}@example.com`);
+    const receptionistToken = await login(`receptionist-a-${suffix}@example.com`);
+    const phone = `119${String(Date.now()).slice(-8)}`;
+    const cpf = `8${String(Date.now()).slice(-10)}`;
+    let customerId: string | undefined;
+
+    try {
+      const created = await request(app.getHttpServer())
+        .post('/api/customers')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          name: `Cliente CRUD ${suffix}`,
+          phone: `(${phone.slice(0, 2)}) ${phone.slice(2, 7)}-${phone.slice(7)}`,
+          cpf,
+        })
+        .expect(201);
+      customerId = created.body.id;
+      expect(created.body.phone).toBe(phone);
+      expect(created.body.cpf).toBe(cpf);
+
+      await request(app.getHttpServer())
+        .post('/api/customers')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: 'Telefone repetido', phone })
+        .expect(409);
+
+      const list = await request(app.getHttpServer())
+        .get(`/api/customers?search=${phone}&page=1&limit=1&sortBy=CREATED_AT&direction=DESC`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(list.body).toEqual(expect.objectContaining({ page: 1, limit: 1, total: 1, pages: 1 }));
+      expect(list.body.items[0].id).toBe(customerId);
+
+      const updated = await request(app.getHttpServer())
+        .patch(`/api/customers/${customerId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: `Cliente atualizado ${suffix}` })
+        .expect(200);
+      expect(updated.body.name).toBe(`Cliente atualizado ${suffix}`);
+
+      const detail = await request(app.getHttpServer())
+        .get(`/api/customers/${customerId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(detail.body.customer.id).toBe(customerId);
+      expect(detail.body).toEqual(
+        expect.objectContaining({
+          serviceHistory: [],
+          productPurchases: [],
+          nextAppointment: null,
+          metrics: { visits: 0, totalSpent: 0, lastVisit: null },
+        }),
+      );
+
+      await request(app.getHttpServer())
+        .patch(`/api/customers/${customerId}/archive`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ archived: true })
+        .expect(200);
+      const archived = await request(app.getHttpServer())
+        .get(`/api/customers?status=ARCHIVED&search=${phone}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(archived.body.items.map((item: { id: string }) => item.id)).toContain(customerId);
+
+      await request(app.getHttpServer())
+        .patch(`/api/customers/${customerId}/archive`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ archived: false })
+        .expect(200);
+
+      await request(app.getHttpServer())
+        .get(`/api/customers/${customerId}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(404);
+      await request(app.getHttpServer())
+        .patch(`/api/customers/${customerId}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ name: 'Invasão' })
+        .expect(404);
+
+      await request(app.getHttpServer())
+        .patch(`/api/customers/${customerId}`)
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .send({ name: 'Sem permissão' })
+        .expect(403);
+      await request(app.getHttpServer())
+        .patch(`/api/customers/${customerId}/archive`)
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .send({ archived: true })
+        .expect(403);
+    } finally {
+      if (customerId) await db.customer.deleteMany({ where: { id: customerId } });
     }
   });
 
@@ -526,6 +624,6 @@ describe('Isolamento multi-tenant (e2e)', () => {
       .get('/api/customers')
       .set('Authorization', `Bearer ${adminToken}`)
       .expect(200);
-    expect(customers.body).toEqual([]);
+    expect(customers.body.items).toEqual([]);
   });
 });

@@ -146,7 +146,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 6.9 Exibir produtos comprados
 - [x] 6.10 Calcular visitas, total gasto e último atendimento
 - [x] 6.11 Exibir próximo agendamento
-- [ ] 6.12 Testar CRUD e isolamento
+- [x] 6.12 Testar CRUD e isolamento
 
 ## Etapa 7 — Serviços e comissões específicas
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Concluir a **Etapa 6** ampliando os testes de CRUD e isolamento do módulo de clientes (item 6.12). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Iniciar a **Etapa 7** criando serviços (item 7.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
