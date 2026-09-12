@@ -10,6 +10,7 @@ export const Permissions = {
   EMPLOYEES_PERMISSIONS: 'employees.permissions',
   EMPLOYEES_COMMISSION: 'employees.commission',
   EMPLOYEES_SCHEDULE: 'employees.schedule',
+  EMPLOYEES_UNAVAILABILITY: 'employees.unavailability',
   SERVICES_READ: 'services.read',
   PRODUCTS_READ: 'products.read',
   APPOINTMENTS_READ: 'appointments.read',

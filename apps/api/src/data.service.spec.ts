@@ -56,6 +56,11 @@ describe('DataService tenant isolation', () => {
         update: jest.fn(),
         delete: jest.fn(),
       },
+      employeeUnavailability: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        delete: jest.fn(),
+      },
       cashRegister: { findFirst: jest.fn().mockResolvedValue(null) },
     };
     db.$transaction = jest.fn((callback) => callback(db));
@@ -632,6 +637,49 @@ describe('DataService tenant isolation', () => {
 
     expect(db.workSchedule.create).toHaveBeenCalledTimes(2);
     expect(db.workSchedule.findFirst).toHaveBeenCalledTimes(1);
+  });
+
+  it('cadastra folga de dia inteiro no tenant do colaborador', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.employeeUnavailability.create.mockResolvedValue({ id: 'day-off-1' });
+
+    await service.createEmployeeDayOff('employee-1', {
+      date: '2026-09-20',
+      reason: '  Compensação  ',
+    });
+
+    expect(db.employeeUnavailability.create).toHaveBeenCalledWith({
+      data: {
+        barbershopId: 'shop-1',
+        employeeId: 'employee-1',
+        type: 'DAY_OFF',
+        startAt: new Date('2026-09-20T00:00:00.000Z'),
+        endAt: new Date('2026-09-21T00:00:00.000Z'),
+        allDay: true,
+        reason: 'Compensação',
+      },
+    });
+  });
+
+  it('rejeita data de folga inexistente', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+
+    await expect(
+      service.createEmployeeDayOff('employee-1', { date: '2026-02-31' }),
+    ).rejects.toThrow('Data inválida');
+    expect(db.employeeUnavailability.create).not.toHaveBeenCalled();
+  });
+
+  it('exclui somente indisponibilidade do colaborador e tenant autenticados', async () => {
+    db.employeeUnavailability.findFirst.mockResolvedValue({ id: 'day-off-1' });
+
+    await service.deleteEmployeeUnavailability('employee-1', 'day-off-1');
+
+    expect(db.employeeUnavailability.findFirst).toHaveBeenCalledWith({
+      where: { id: 'day-off-1', employeeId: 'employee-1', barbershopId: 'shop-1' },
+      select: { id: true },
+    });
+    expect(db.employeeUnavailability.delete).toHaveBeenCalledWith({ where: { id: 'day-off-1' } });
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {

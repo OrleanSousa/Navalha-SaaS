@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
 import {
+  CreateEmployeeDayOffDto,
   CreateEmployeeDto,
   CreateEmployeeAccessDto,
   EmployeeStatusFilter,
@@ -577,6 +578,55 @@ export class DataService {
     });
     if (!schedule) throw new NotFoundException('Jornada não encontrada');
     await this.db.workSchedule.delete({ where: { id: schedule.id } });
+  }
+
+  async createEmployeeDayOff(employeeId: string, dto: CreateEmployeeDayOffDto) {
+    const employee = await this.findTenantEmployee(employeeId);
+    const startAt = this.parseDateOnly(dto.date);
+    const endAt = new Date(startAt);
+    endAt.setUTCDate(endAt.getUTCDate() + 1);
+
+    return this.db.employeeUnavailability.create({
+      data: {
+        barbershopId: this.tenant.barbershopId,
+        employeeId: employee.id,
+        type: 'DAY_OFF',
+        startAt,
+        endAt,
+        allDay: true,
+        reason: dto.reason?.trim() || null,
+      },
+    });
+  }
+
+  async deleteEmployeeUnavailability(employeeId: string, unavailabilityId: string) {
+    const unavailability = await this.db.employeeUnavailability.findFirst({
+      where: {
+        id: unavailabilityId,
+        employeeId,
+        barbershopId: this.tenant.barbershopId,
+      },
+      select: { id: true },
+    });
+    if (!unavailability) throw new NotFoundException('Indisponibilidade não encontrada');
+    await this.db.employeeUnavailability.delete({ where: { id: unavailability.id } });
+  }
+
+  private async findTenantEmployee(employeeId: string) {
+    const employee = await this.db.employee.findFirst({
+      where: { id: employeeId, barbershopId: this.tenant.barbershopId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!employee) throw new NotFoundException('Colaborador não encontrado');
+    return employee;
+  }
+
+  private parseDateOnly(value: string) {
+    const date = new Date(`${value}T00:00:00.000Z`);
+    if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) {
+      throw new BadRequestException('Data inválida');
+    }
+    return date;
   }
 
   services() {

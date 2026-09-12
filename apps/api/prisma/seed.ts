@@ -13,6 +13,7 @@ const permissionCatalog = [
   ['employees.permissions', 'Editar perfil e permissões'],
   ['employees.commission', 'Configurar comissão padrão'],
   ['employees.schedule', 'Gerenciar jornada semanal'],
+  ['employees.unavailability', 'Gerenciar indisponibilidades'],
   ['services.read', 'Visualizar serviços'],
   ['products.read', 'Visualizar produtos'],
   ['appointments.read', 'Visualizar agenda'],
