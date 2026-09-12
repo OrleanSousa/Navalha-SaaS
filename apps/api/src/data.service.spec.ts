@@ -170,6 +170,24 @@ describe('DataService tenant isolation', () => {
     });
   });
 
+  it('busca clientes por nome, telefone e CPF normalizados', async () => {
+    await service.customers({ status: 'ACTIVE', search: '(11) 99876-5432' } as any);
+
+    expect(db.customer.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          barbershopId: 'shop-1',
+          deletedAt: null,
+          OR: [
+            { name: { contains: '(11) 99876-5432', mode: 'insensitive' } },
+            { phone: { contains: '11998765432' } },
+            { cpf: { contains: '11998765432' } },
+          ],
+        }),
+      }),
+    );
+  });
+
   it('isola a agenda pelo tenant', async () => {
     await service.appointments();
 

@@ -73,6 +73,11 @@ export class ListCustomersQuery {
   @IsOptional()
   @IsEnum(CustomerStatusFilter)
   status = CustomerStatusFilter.ACTIVE;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  search?: string;
 }
 
 export class SetCustomerArchiveDto {

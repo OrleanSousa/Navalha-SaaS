@@ -37,11 +37,19 @@ export class DataService {
   ) {}
 
   customers(query: ListCustomersQuery = new ListCustomersQuery()) {
+    const search = query.search?.trim();
+    const digits = search?.replace(/\D/g, '');
     return this.db.customer.findMany({
       where: {
         barbershopId: this.tenant.barbershopId,
         ...(query.status === CustomerStatusFilter.ACTIVE && { deletedAt: null }),
         ...(query.status === CustomerStatusFilter.ARCHIVED && { deletedAt: { not: null } }),
+        ...(search && {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            ...(digits ? [{ phone: { contains: digits } }, { cpf: { contains: digits } }] : []),
+          ],
+        }),
       },
       include: { _count: { select: { appointments: true } } },
       orderBy: { name: 'asc' },

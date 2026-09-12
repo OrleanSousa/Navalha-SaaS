@@ -37,10 +37,12 @@ export function Customers() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string>();
   const [status, setStatus] = useState('ACTIVE');
+  const [search, setSearch] = useState('');
   const [form, setForm] = useState(emptyForm);
   const { data = [] } = useQuery<Customer[]>({
-    queryKey: ['customers', status],
-    queryFn: async () => (await api.get('/customers', { params: { status } })).data,
+    queryKey: ['customers', { status, search }],
+    queryFn: async () =>
+      (await api.get('/customers', { params: { status, search: search || undefined } })).data,
   });
 
   const setArchive = useMutation({
@@ -212,7 +214,11 @@ export function Customers() {
         <div className="table-tools">
           <label className="search">
             <Search />
-            <input placeholder="Buscar por nome, telefone ou CPF..." />
+            <input
+              placeholder="Buscar por nome, telefone ou CPF..."
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           </label>
           <div className="customer-status-filter">
             {[
