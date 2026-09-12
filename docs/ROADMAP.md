@@ -131,7 +131,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 - [x] 5.6 Cadastrar bloqueios pontuais de agenda
 - [x] 5.7 Exibir jornada na tela do colaborador
 - [x] 5.8 Criar serviço backend de cálculo de disponibilidade
-- [ ] 5.9 Testar jornada, intervalos, folgas e bloqueios
+- [x] 5.9 Testar jornada, intervalos, folgas e bloqueios
 
 ## Etapa 6 — Clientes
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Concluir a **Etapa 5** ampliando os testes de jornada, intervalos, folgas e bloqueios (item 5.9). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Iniciar a **Etapa 6** criando clientes com telefone normalizado (item 6.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

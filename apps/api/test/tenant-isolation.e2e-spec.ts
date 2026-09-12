@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import request = require('supertest');
 import { TenantContext } from '../src/auth-context';
 import { AuthController, AuthService, JwtStrategy } from '../src/auth';
+import { AvailabilityService } from '../src/availability.service';
 import { DataController } from '../src/data.controller';
 import { DataService } from '../src/data.service';
 import { PrismaService } from '../src/prisma.service';
@@ -50,6 +51,7 @@ describe('Isolamento multi-tenant (e2e)', () => {
         JwtStrategy,
         TenantContext,
         DataService,
+        AvailabilityService,
         RolesGuard,
         PermissionsGuard,
         SuperAdminService,
@@ -275,6 +277,88 @@ describe('Isolamento multi-tenant (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .send({ defaultCommission: 25 })
       .expect(403);
+  });
+
+  it('valida jornada, folga, bloqueio, disponibilidade e isolamento', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    const scheduleIds: string[] = [];
+    const unavailabilityIds: string[] = [];
+
+    try {
+      const schedule = await request(app.getHttpServer())
+        .post(`/api/employees/${employeeAId}/schedules`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ weekday: 1, startTime: '08:00', endTime: '10:00', active: true })
+        .expect(201);
+      scheduleIds.push(schedule.body.id);
+
+      await request(app.getHttpServer())
+        .post(`/api/employees/${employeeAId}/schedules`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ weekday: 1, startTime: '09:00', endTime: '11:00', active: true })
+        .expect(409);
+      await request(app.getHttpServer())
+        .post(`/api/employees/${employeeAId}/schedules`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ weekday: 2, startTime: '18:00', endTime: '08:00', active: true })
+        .expect(400);
+
+      const block = await request(app.getHttpServer())
+        .post(`/api/employees/${employeeAId}/unavailabilities/block`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          startAt: '2030-01-07T11:30:00.000Z',
+          endAt: '2030-01-07T12:00:00.000Z',
+          reason: 'Bloqueio E2E',
+        })
+        .expect(201);
+      unavailabilityIds.push(block.body.id);
+
+      const availability = await request(app.getHttpServer())
+        .get(
+          `/api/employees/${employeeAId}/availability?date=2030-01-07&durationMinutes=30&stepMinutes=30`,
+        )
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(availability.body.slots.map((slot: { startAt: string }) => slot.startAt)).toEqual([
+        '2030-01-07T11:00:00.000Z',
+        '2030-01-07T12:00:00.000Z',
+        '2030-01-07T12:30:00.000Z',
+      ]);
+
+      const dayOff = await request(app.getHttpServer())
+        .post(`/api/employees/${employeeAId}/unavailabilities/day-off`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ date: '2030-01-07', reason: 'Folga E2E' })
+        .expect(201);
+      unavailabilityIds.push(dayOff.body.id);
+
+      const unavailable = await request(app.getHttpServer())
+        .get(`/api/employees/${employeeAId}/availability?date=2030-01-07`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(unavailable.body.slots).toEqual([]);
+
+      await request(app.getHttpServer())
+        .post(`/api/employees/${employeeBId}/unavailabilities/day-off`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ date: '2030-01-08' })
+        .expect(404);
+      await request(app.getHttpServer())
+        .get(`/api/employees/${employeeBId}/availability?date=2030-01-07`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(404);
+
+      const receptionistToken = await login(`receptionist-a-${suffix}@example.com`);
+      await request(app.getHttpServer())
+        .post(`/api/employees/${employeeAId}/unavailabilities/day-off`)
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .send({ date: '2030-01-08' })
+        .expect(403);
+    } finally {
+      await db.employeeUnavailability.deleteMany({ where: { id: { in: unavailabilityIds } } });
+      await db.workSchedule.deleteMany({ where: { id: { in: scheduleIds } } });
+    }
   });
 
   it('permite ao Super Admin cadastrar um tenant com administrador inicial', async () => {
