@@ -57,6 +57,7 @@ describe('DataService tenant isolation', () => {
       },
       sale: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: null }, _avg: { total: null } }),
+        findMany: jest.fn().mockResolvedValue([]),
       },
       commission: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
@@ -300,6 +301,32 @@ describe('DataService tenant isolation', () => {
     expect(result.serviceHistory).toEqual([{ id: 'appointment-1' }]);
     expect(db.appointment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({ orderBy: { startAt: 'desc' } }),
+    );
+  });
+
+  it('retorna somente produtos comprados pelo cliente', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1', name: 'Ana' });
+    db.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-1',
+        createdAt: new Date('2026-09-10T12:00:00.000Z'),
+        items: [{ id: 'item-1', product: { id: 'product-1', name: 'Pomada' }, quantity: 2 }],
+      },
+    ]);
+
+    const result = await service.customerDetails('customer-1');
+
+    expect(db.sale.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          barbershopId: 'shop-1',
+          customerId: 'customer-1',
+          items: { some: { productId: { not: null } } },
+        },
+      }),
+    );
+    expect(result.productPurchases[0]).toEqual(
+      expect.objectContaining({ id: 'item-1', saleId: 'sale-1', purchasedAt: expect.any(Date) }),
     );
   });
 

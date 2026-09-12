@@ -28,6 +28,15 @@ type CustomerDetailsResponse = {
       service: { id: string; name: string };
     }>;
   }>;
+  productPurchases: Array<{
+    id: string;
+    saleId: string;
+    purchasedAt: string;
+    quantity: number;
+    unitPrice: string | number;
+    total: string | number;
+    product: { id: string; name: string };
+  }>;
 };
 
 function formatDate(value?: string | null) {
@@ -165,6 +174,44 @@ export function CustomerDetails() {
                       min
                     </td>
                     <td>{money(Number(appointment.price))}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
+
+      <section className="employee-detail-section">
+        <div className="detail-section-head">
+          <div>
+            <h3>Produtos comprados</h3>
+            <p>Itens de varejo adquiridos pelo cliente.</p>
+          </div>
+          <span>{data.productPurchases.length} itens</span>
+        </div>
+        {!data.productPurchases.length ? (
+          <p className="detail-empty">Nenhum produto comprado.</p>
+        ) : (
+          <div className="customer-history-table">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Produto</th>
+                  <th>Quantidade</th>
+                  <th>Valor unitário</th>
+                  <th>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.productPurchases.map((item) => (
+                  <tr key={item.id}>
+                    <td>{new Intl.DateTimeFormat('pt-BR').format(new Date(item.purchasedAt))}</td>
+                    <td>{item.product.name}</td>
+                    <td>{item.quantity}</td>
+                    <td>{money(Number(item.unitPrice))}</td>
+                    <td>{money(Number(item.total))}</td>
                   </tr>
                 ))}
               </tbody>

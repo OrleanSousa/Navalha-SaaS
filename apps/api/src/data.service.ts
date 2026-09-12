@@ -199,7 +199,32 @@ export class DataService {
       },
       orderBy: { startAt: 'desc' },
     });
-    return { customer, serviceHistory };
+    const productSales = await this.db.sale.findMany({
+      where: {
+        barbershopId: this.tenant.barbershopId,
+        customerId: customer.id,
+        items: { some: { productId: { not: null } } },
+      },
+      select: {
+        id: true,
+        createdAt: true,
+        items: {
+          where: { productId: { not: null } },
+          select: {
+            id: true,
+            quantity: true,
+            unitPrice: true,
+            total: true,
+            product: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    const productPurchases = productSales.flatMap((sale) =>
+      sale.items.map((item) => ({ ...item, saleId: sale.id, purchasedAt: sale.createdAt })),
+    );
+    return { customer, serviceHistory, productPurchases };
   }
 
   private async validateCustomerDuplicates(phone: string, cpf: string | null, excludeId?: string) {
