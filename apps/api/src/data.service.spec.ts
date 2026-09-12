@@ -18,6 +18,7 @@ describe('DataService tenant isolation', () => {
       customer: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
         create: jest.fn(),
         update: jest.fn(),
       },
@@ -186,6 +187,30 @@ describe('DataService tenant isolation', () => {
         }),
       }),
     );
+  });
+
+  it('pagina e ordena clientes dentro do tenant', async () => {
+    db.customer.findMany.mockResolvedValue([{ id: 'customer-1' }]);
+    db.customer.count.mockResolvedValue(12);
+
+    const result = await service.customers({
+      page: 2,
+      limit: 5,
+      status: 'ALL',
+      sortBy: 'CREATED_AT',
+      direction: 'DESC',
+    } as any);
+
+    expect(db.customer.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { createdAt: 'desc' }, skip: 5, take: 5 }),
+    );
+    expect(result).toEqual({
+      items: [{ id: 'customer-1' }],
+      page: 2,
+      limit: 5,
+      total: 12,
+      pages: 3,
+    });
   });
 
   it('isola a agenda pelo tenant', async () => {

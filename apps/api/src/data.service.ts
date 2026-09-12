@@ -14,6 +14,7 @@ import { TenantContext } from './auth-context';
 import {
   CreateCustomerDto,
   CustomerStatusFilter,
+  CustomerSortField,
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
   CreateEmployeeScheduleBlockDto,
@@ -22,6 +23,7 @@ import {
   EmployeeStatusFilter,
   ListEmployeesQuery,
   ListCustomersQuery,
+  SortDirection,
   UpdateEmployeeDto,
   UpdateCustomerDto,
   UpdateEmployeeAccessDto,
@@ -36,24 +38,38 @@ export class DataService {
     private readonly tenant: TenantContext,
   ) {}
 
-  customers(query: ListCustomersQuery = new ListCustomersQuery()) {
+  async customers(query: ListCustomersQuery = new ListCustomersQuery()) {
     const search = query.search?.trim();
     const digits = search?.replace(/\D/g, '');
-    return this.db.customer.findMany({
-      where: {
-        barbershopId: this.tenant.barbershopId,
-        ...(query.status === CustomerStatusFilter.ACTIVE && { deletedAt: null }),
-        ...(query.status === CustomerStatusFilter.ARCHIVED && { deletedAt: { not: null } }),
-        ...(search && {
-          OR: [
-            { name: { contains: search, mode: 'insensitive' } },
-            ...(digits ? [{ phone: { contains: digits } }, { cpf: { contains: digits } }] : []),
-          ],
-        }),
-      },
-      include: { _count: { select: { appointments: true } } },
-      orderBy: { name: 'asc' },
-    });
+    const page = query.page || 1;
+    const limit = query.limit || 10;
+    const where: Prisma.CustomerWhereInput = {
+      barbershopId: this.tenant.barbershopId,
+      ...(query.status === CustomerStatusFilter.ACTIVE && { deletedAt: null }),
+      ...(query.status === CustomerStatusFilter.ARCHIVED && { deletedAt: { not: null } }),
+      ...(search && {
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          ...(digits ? [{ phone: { contains: digits } }, { cpf: { contains: digits } }] : []),
+        ],
+      }),
+    };
+    const direction = query.direction === SortDirection.DESC ? 'desc' : 'asc';
+    const orderBy: Prisma.CustomerOrderByWithRelationInput =
+      query.sortBy === CustomerSortField.CREATED_AT
+        ? { createdAt: direction }
+        : { name: direction };
+    const [items, total] = await Promise.all([
+      this.db.customer.findMany({
+        where,
+        include: { _count: { select: { appointments: true } } },
+        orderBy,
+        skip: (page - 1) * limit,
+        take: limit,
+      }),
+      this.db.customer.count({ where }),
+    ]);
+    return { items, page, limit, total, pages: Math.ceil(total / limit) };
   }
 
   createCustomer(dto: CreateCustomerDto) {

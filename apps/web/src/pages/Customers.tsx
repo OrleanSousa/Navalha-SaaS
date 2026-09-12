@@ -1,6 +1,17 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, Pencil, Phone, Plus, RotateCcw, Save, Search, X } from 'lucide-react';
-import { useState } from 'react';
+import {
+  Archive,
+  ChevronLeft,
+  ChevronRight,
+  Pencil,
+  Phone,
+  Plus,
+  RotateCcw,
+  Save,
+  Search,
+  X,
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { api, money } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -21,6 +32,14 @@ type Customer = {
   deletedAt?: string | null;
 };
 
+type CustomerPage = {
+  items: Customer[];
+  page: number;
+  limit: number;
+  total: number;
+  pages: number;
+};
+
 const emptyForm = {
   name: '',
   phone: '',
@@ -38,12 +57,28 @@ export function Customers() {
   const [editingId, setEditingId] = useState<string>();
   const [status, setStatus] = useState('ACTIVE');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [sort, setSort] = useState('NAME:ASC');
   const [form, setForm] = useState(emptyForm);
-  const { data = [] } = useQuery<Customer[]>({
-    queryKey: ['customers', { status, search }],
+  const { data } = useQuery<CustomerPage>({
+    queryKey: ['customers', { status, search, page, sort }],
     queryFn: async () =>
-      (await api.get('/customers', { params: { status, search: search || undefined } })).data,
+      (
+        await api.get('/customers', {
+          params: {
+            status,
+            search: search || undefined,
+            page,
+            limit: 10,
+            sortBy: sort.split(':')[0],
+            direction: sort.split(':')[1],
+          },
+        })
+      ).data,
+    placeholderData: (previous) => previous,
   });
+
+  useEffect(() => setPage(1), [search, status, sort]);
 
   const setArchive = useMutation({
     mutationFn: ({ id, archived }: { id: string; archived: boolean }) =>
@@ -236,7 +271,18 @@ export function Customers() {
               </button>
             ))}
           </div>
-          <span>{data.length} clientes cadastrados</span>
+          <select
+            className="customer-sort"
+            value={sort}
+            onChange={(event) => setSort(event.target.value)}
+            aria-label="Ordenar clientes"
+          >
+            <option value="NAME:ASC">Nome A–Z</option>
+            <option value="NAME:DESC">Nome Z–A</option>
+            <option value="CREATED_AT:DESC">Mais recentes</option>
+            <option value="CREATED_AT:ASC">Mais antigos</option>
+          </select>
+          <span>{data?.total ?? 0} clientes cadastrados</span>
         </div>
         <table>
           <thead>
@@ -250,7 +296,7 @@ export function Customers() {
             </tr>
           </thead>
           <tbody>
-            {data.map((customer) => (
+            {data?.items.map((customer) => (
               <tr key={customer.id}>
                 <td>
                   <div className="customer">
@@ -297,7 +343,32 @@ export function Customers() {
             ))}
           </tbody>
         </table>
-        {!data.length && <div className="empty">Nenhum cliente encontrado.</div>}
+        {!data?.items.length && <div className="empty">Nenhum cliente encontrado.</div>}
+        {Boolean(data?.total) && (
+          <div className="customer-pagination">
+            <button
+              className="icon"
+              type="button"
+              title="Página anterior"
+              disabled={page <= 1}
+              onClick={() => setPage((current) => current - 1)}
+            >
+              <ChevronLeft />
+            </button>
+            <span>
+              Página {page} de {data?.pages || 1}
+            </span>
+            <button
+              className="icon"
+              type="button"
+              title="Próxima página"
+              disabled={page >= (data?.pages || 1)}
+              onClick={() => setPage((current) => current + 1)}
+            >
+              <ChevronRight />
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

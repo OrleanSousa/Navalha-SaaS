@@ -69,7 +69,30 @@ export enum CustomerStatusFilter {
   ALL = 'ALL',
 }
 
+export enum CustomerSortField {
+  NAME = 'NAME',
+  CREATED_AT = 'CREATED_AT',
+}
+
+export enum SortDirection {
+  ASC = 'ASC',
+  DESC = 'DESC',
+}
+
 export class ListCustomersQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit = 10;
+
   @IsOptional()
   @IsEnum(CustomerStatusFilter)
   status = CustomerStatusFilter.ACTIVE;
@@ -78,6 +101,14 @@ export class ListCustomersQuery {
   @IsString()
   @MaxLength(120)
   search?: string;
+
+  @IsOptional()
+  @IsEnum(CustomerSortField)
+  sortBy = CustomerSortField.NAME;
+
+  @IsOptional()
+  @IsEnum(SortDirection)
+  direction = SortDirection.ASC;
 }
 
 export class SetCustomerArchiveDto {
