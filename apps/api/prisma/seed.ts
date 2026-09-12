@@ -191,7 +191,7 @@ async function main() {
       data: {
         barbershopId: shop.id,
         name,
-        phone: `(11) 9888${i}-123${i}`,
+        phone: `119888${i}123${i}`,
         whatsapp: `119888${i}123${i}`,
       },
     });
