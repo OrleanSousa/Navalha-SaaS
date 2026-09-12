@@ -275,6 +275,24 @@ describe('DataService tenant isolation', () => {
     expect(result).toEqual({ allowDuplicatePhone: true, allowDuplicateCpf: false });
   });
 
+  it('carrega a ficha do cliente somente no tenant autenticado', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1', name: 'Ana' });
+
+    const result = await service.customerDetails('customer-1');
+
+    expect(db.customer.findFirst).toHaveBeenCalledWith({
+      where: { id: 'customer-1', barbershopId: 'shop-1' },
+    });
+    expect(result.customer.name).toBe('Ana');
+  });
+
+  it('não revela ficha de cliente de outro tenant', async () => {
+    db.customer.findFirst.mockResolvedValue(null);
+    await expect(service.customerDetails('customer-other')).rejects.toThrow(
+      'Cliente não encontrado',
+    );
+  });
+
   it('isola a agenda pelo tenant', async () => {
     await service.appointments();
 

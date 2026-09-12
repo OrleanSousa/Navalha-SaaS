@@ -4,6 +4,7 @@ import { Shell } from './components/Shell';
 import { Dashboard } from './pages/Dashboard';
 import { Agenda } from './pages/Agenda';
 import { Customers } from './pages/Customers';
+import { CustomerDetails } from './pages/CustomerDetails';
 import { Catalog } from './pages/Catalog';
 import { Finance } from './pages/Finance';
 import { Employees } from './pages/Employees';
@@ -36,6 +37,7 @@ export default function App() {
         <Route index element={<Dashboard />} />
         <Route path="agenda" element={<Agenda />} />
         <Route path="clientes" element={<Customers />} />
+        <Route path="clientes/:id" element={<CustomerDetails />} />
         <Route path="servicos" element={<Catalog type="services" />} />
         <Route path="produtos" element={<Catalog type="products" />} />
         <Route path="financeiro" element={<Finance />} />

@@ -13,6 +13,7 @@ import {
   X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api, money } from '../lib/api';
 import { useAuth } from '../lib/auth';
@@ -370,7 +371,9 @@ export function Customers() {
                 <td>
                   <div className="customer">
                     <span>{customer.name.slice(0, 2).toUpperCase()}</span>
-                    <b>{customer.name}</b>
+                    <Link className="customer-detail-link" to={`/clientes/${customer.id}`}>
+                      {customer.name}
+                    </Link>
                   </div>
                 </td>
                 <td>

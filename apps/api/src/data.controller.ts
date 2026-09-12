@@ -86,6 +86,12 @@ export class DataController {
     return this.data.updateCustomerDuplicatePolicy(dto);
   }
 
+  @Get('customers/:id')
+  @RequirePermissions(Permissions.CUSTOMERS_READ)
+  customerDetails(@Param('id') id: string) {
+    return this.data.customerDetails(id);
+  }
+
   @Get('employees')
   @RequirePermissions(Permissions.EMPLOYEES_READ)
   employees(@Query() query: ListEmployeesQuery) {

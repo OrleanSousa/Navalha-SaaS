@@ -171,6 +171,14 @@ export class DataService {
     };
   }
 
+  async customerDetails(id: string) {
+    const customer = await this.db.customer.findFirst({
+      where: { id, barbershopId: this.tenant.barbershopId },
+    });
+    if (!customer) throw new NotFoundException('Cliente não encontrado');
+    return { customer };
+  }
+
   private async validateCustomerDuplicates(phone: string, cpf: string | null, excludeId?: string) {
     const policy = await this.customerDuplicatePolicy();
     const conditions: Prisma.CustomerWhereInput[] = [];
