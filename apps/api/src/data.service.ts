@@ -12,6 +12,7 @@ import * as bcrypt from 'bcrypt';
 import { PrismaService } from './prisma.service';
 import { TenantContext } from './auth-context';
 import {
+  CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
   CreateEmployeeDto,
   CreateEmployeeAccessDto,
@@ -591,6 +592,29 @@ export class DataService {
         barbershopId: this.tenant.barbershopId,
         employeeId: employee.id,
         type: 'DAY_OFF',
+        startAt,
+        endAt,
+        allDay: true,
+        reason: dto.reason?.trim() || null,
+      },
+    });
+  }
+
+  async createEmployeeAbsence(employeeId: string, dto: CreateEmployeeAbsenceDto) {
+    const employee = await this.findTenantEmployee(employeeId);
+    const startAt = this.parseDateOnly(dto.startDate);
+    const endDate = this.parseDateOnly(dto.endDate);
+    if (endDate < startAt) {
+      throw new BadRequestException('O fim do período deve ser igual ou posterior ao início');
+    }
+    const endAt = new Date(endDate);
+    endAt.setUTCDate(endAt.getUTCDate() + 1);
+
+    return this.db.employeeUnavailability.create({
+      data: {
+        barbershopId: this.tenant.barbershopId,
+        employeeId: employee.id,
+        type: dto.type,
         startAt,
         endAt,
         allDay: true,

@@ -19,6 +19,7 @@ import { Role } from '@prisma/client';
 import { memoryStorage } from 'multer';
 import { DataService } from './data.service';
 import {
+  CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
   CreateEmployeeDto,
   CreateWorkScheduleDto,
@@ -145,6 +146,12 @@ export class DataController {
   @RequirePermissions(Permissions.EMPLOYEES_UNAVAILABILITY)
   createEmployeeDayOff(@Param('id') id: string, @Body() dto: CreateEmployeeDayOffDto) {
     return this.data.createEmployeeDayOff(id, dto);
+  }
+
+  @Post('employees/:id/unavailabilities/absence')
+  @RequirePermissions(Permissions.EMPLOYEES_UNAVAILABILITY)
+  createEmployeeAbsence(@Param('id') id: string, @Body() dto: CreateEmployeeAbsenceDto) {
+    return this.data.createEmployeeAbsence(id, dto);
   }
 
   @Delete('employees/:id/unavailabilities/:unavailabilityId')

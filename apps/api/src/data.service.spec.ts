@@ -1,4 +1,5 @@
 import { DataService } from './data.service';
+import { EmployeeAbsenceType } from './data.dto';
 import * as fs from 'node:fs/promises';
 
 jest.mock('node:fs/promises', () => ({
@@ -667,6 +668,46 @@ describe('DataService tenant isolation', () => {
     await expect(
       service.createEmployeeDayOff('employee-1', { date: '2026-02-31' }),
     ).rejects.toThrow('Data inválida');
+    expect(db.employeeUnavailability.create).not.toHaveBeenCalled();
+  });
+
+  it.each([EmployeeAbsenceType.VACATION, EmployeeAbsenceType.LEAVE])(
+    'cadastra período de %s',
+    async (type) => {
+      db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+      db.employeeUnavailability.create.mockResolvedValue({ id: 'absence-1' });
+
+      await service.createEmployeeAbsence('employee-1', {
+        type,
+        startDate: '2026-10-01',
+        endDate: '2026-10-10',
+        reason: 'Período programado',
+      });
+
+      expect(db.employeeUnavailability.create).toHaveBeenCalledWith({
+        data: {
+          barbershopId: 'shop-1',
+          employeeId: 'employee-1',
+          type,
+          startAt: new Date('2026-10-01T00:00:00.000Z'),
+          endAt: new Date('2026-10-11T00:00:00.000Z'),
+          allDay: true,
+          reason: 'Período programado',
+        },
+      });
+    },
+  );
+
+  it('rejeita período de ausência invertido', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+
+    await expect(
+      service.createEmployeeAbsence('employee-1', {
+        type: EmployeeAbsenceType.VACATION,
+        startDate: '2026-10-10',
+        endDate: '2026-10-01',
+      }),
+    ).rejects.toThrow('O fim do período deve ser igual ou posterior ao início');
     expect(db.employeeUnavailability.create).not.toHaveBeenCalled();
   });
 

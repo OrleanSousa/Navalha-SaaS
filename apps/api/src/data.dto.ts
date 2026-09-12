@@ -173,3 +173,24 @@ export class CreateEmployeeDayOffDto {
   @MaxLength(300)
   reason?: string;
 }
+
+export enum EmployeeAbsenceType {
+  VACATION = 'VACATION',
+  LEAVE = 'LEAVE',
+}
+
+export class CreateEmployeeAbsenceDto {
+  @IsEnum(EmployeeAbsenceType)
+  type: EmployeeAbsenceType;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  startDate: string;
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  endDate: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}
