@@ -10,6 +10,7 @@ import { DataController } from './data.controller';
 import { HealthController } from './health.controller';
 import { TenantContext } from './auth-context';
 import { DataService } from './data.service';
+import { AvailabilityService } from './availability.service';
 import { PermissionsGuard, RolesGuard } from './rbac';
 import { SuperAdminController, SuperAdminService } from './super-admin';
 
@@ -31,6 +32,7 @@ import { SuperAdminController, SuperAdminService } from './super-admin';
     JwtStrategy,
     TenantContext,
     DataService,
+    AvailabilityService,
     RolesGuard,
     PermissionsGuard,
     SuperAdminService,

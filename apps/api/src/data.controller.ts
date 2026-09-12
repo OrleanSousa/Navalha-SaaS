@@ -18,12 +18,14 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { Role } from '@prisma/client';
 import { memoryStorage } from 'multer';
 import { DataService } from './data.service';
+import { AvailabilityService } from './availability.service';
 import {
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
   CreateEmployeeScheduleBlockDto,
   CreateEmployeeDto,
   CreateWorkScheduleDto,
+  EmployeeAvailabilityQuery,
   CreateEmployeeAccessDto,
   ListEmployeesQuery,
   SetEmployeeStatusDto,
@@ -38,7 +40,10 @@ import { Permissions, PermissionsGuard, RequirePermissions, Roles, RolesGuard } 
 @Roles(Role.ADMIN, Role.RECEPTIONIST, Role.BARBER)
 @UseGuards(AuthGuard('jwt'), RolesGuard, PermissionsGuard)
 export class DataController {
-  constructor(private readonly data: DataService) {}
+  constructor(
+    private readonly data: DataService,
+    private readonly availability: AvailabilityService,
+  ) {}
 
   @Get('customers')
   @RequirePermissions(Permissions.CUSTOMERS_READ)
@@ -56,6 +61,12 @@ export class DataController {
   @RequirePermissions(Permissions.EMPLOYEES_READ)
   employeeDetails(@Param('id') id: string) {
     return this.data.employeeDetails(id);
+  }
+
+  @Get('employees/:id/availability')
+  @RequirePermissions(Permissions.EMPLOYEES_READ)
+  employeeAvailability(@Param('id') id: string, @Query() query: EmployeeAvailabilityQuery) {
+    return this.availability.employeeSlots(id, query);
   }
 
   @Post('employees')

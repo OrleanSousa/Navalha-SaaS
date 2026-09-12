@@ -207,3 +207,22 @@ export class CreateEmployeeScheduleBlockDto {
   @MaxLength(300)
   reason?: string;
 }
+
+export class EmployeeAvailabilityQuery {
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  date: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(720)
+  durationMinutes = 30;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(120)
+  stepMinutes = 15;
+}
