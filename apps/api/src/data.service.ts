@@ -63,14 +63,33 @@ export class DataService {
     const [items, total] = await Promise.all([
       this.db.customer.findMany({
         where,
-        include: { _count: { select: { appointments: true } } },
+        include: {
+          _count: { select: { appointments: { where: { status: 'COMPLETED' } } } },
+          appointments: {
+            where: { status: 'COMPLETED' },
+            select: { startAt: true },
+            orderBy: { startAt: 'desc' },
+            take: 1,
+          },
+          sales: { select: { total: true } },
+        },
         orderBy,
         skip: (page - 1) * limit,
         take: limit,
       }),
       this.db.customer.count({ where }),
     ]);
-    return { items, page, limit, total, pages: Math.ceil(total / limit) };
+    return {
+      items: items.map(({ appointments, sales, ...customer }) => ({
+        ...customer,
+        totalSpent: sales.reduce((sum, sale) => sum + Number(sale.total), 0),
+        lastVisit: appointments[0]?.startAt || null,
+      })),
+      page,
+      limit,
+      total,
+      pages: Math.ceil(total / limit),
+    };
   }
 
   async createCustomer(dto: CreateCustomerDto) {
@@ -224,7 +243,20 @@ export class DataService {
     const productPurchases = productSales.flatMap((sale) =>
       sale.items.map((item) => ({ ...item, saleId: sale.id, purchasedAt: sale.createdAt })),
     );
-    return { customer, serviceHistory, productPurchases };
+    const spending = await this.db.sale.aggregate({
+      where: { barbershopId: this.tenant.barbershopId, customerId: customer.id },
+      _sum: { total: true },
+    });
+    return {
+      customer,
+      serviceHistory,
+      productPurchases,
+      metrics: {
+        visits: serviceHistory.length,
+        totalSpent: Number(spending._sum.total || 0),
+        lastVisit: serviceHistory[0]?.startAt || null,
+      },
+    };
   }
 
   private async validateCustomerDuplicates(phone: string, cpf: string | null, excludeId?: string) {

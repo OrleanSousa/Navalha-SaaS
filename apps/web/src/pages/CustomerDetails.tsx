@@ -1,5 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, CalendarDays, FileText, Mail, Phone, UserRound } from 'lucide-react';
+import {
+  ArrowLeft,
+  CalendarCheck,
+  CalendarDays,
+  FileText,
+  Mail,
+  Phone,
+  UserRound,
+  WalletCards,
+} from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { api, money } from '../lib/api';
 
@@ -37,6 +46,11 @@ type CustomerDetailsResponse = {
     total: string | number;
     product: { id: string; name: string };
   }>;
+  metrics: {
+    visits: number;
+    totalSpent: number;
+    lastVisit?: string | null;
+  };
 };
 
 function formatDate(value?: string | null) {
@@ -84,6 +98,34 @@ export function CustomerDetails() {
             </span>
           </div>
           <p>Cliente desde {formatDate(customer.createdAt)}</p>
+        </div>
+      </div>
+
+      <div className="customer-detail-metrics">
+        <div>
+          <CalendarCheck />
+          <span>
+            <small>Visitas concluídas</small>
+            <b>{data.metrics.visits}</b>
+          </span>
+        </div>
+        <div>
+          <WalletCards />
+          <span>
+            <small>Total gasto</small>
+            <b>{money(data.metrics.totalSpent)}</b>
+          </span>
+        </div>
+        <div>
+          <CalendarDays />
+          <span>
+            <small>Último atendimento</small>
+            <b>
+              {data.metrics.lastVisit
+                ? new Intl.DateTimeFormat('pt-BR').format(new Date(data.metrics.lastVisit))
+                : 'Nenhum'}
+            </b>
+          </span>
         </div>
       </div>
 

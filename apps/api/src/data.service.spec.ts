@@ -197,7 +197,7 @@ describe('DataService tenant isolation', () => {
   });
 
   it('pagina e ordena clientes dentro do tenant', async () => {
-    db.customer.findMany.mockResolvedValue([{ id: 'customer-1' }]);
+    db.customer.findMany.mockResolvedValue([{ id: 'customer-1', appointments: [], sales: [] }]);
     db.customer.count.mockResolvedValue(12);
 
     const result = await service.customers({
@@ -212,7 +212,7 @@ describe('DataService tenant isolation', () => {
       expect.objectContaining({ orderBy: { createdAt: 'desc' }, skip: 5, take: 5 }),
     );
     expect(result).toEqual({
-      items: [{ id: 'customer-1' }],
+      items: [{ id: 'customer-1', totalSpent: 0, lastVisit: null }],
       page: 2,
       limit: 5,
       total: 12,
@@ -328,6 +328,27 @@ describe('DataService tenant isolation', () => {
     expect(result.productPurchases[0]).toEqual(
       expect.objectContaining({ id: 'item-1', saleId: 'sale-1', purchasedAt: expect.any(Date) }),
     );
+  });
+
+  it('calcula visitas, total gasto e último atendimento do cliente', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1', name: 'Ana' });
+    db.appointment.findMany.mockResolvedValue([
+      { id: 'appointment-2', startAt: new Date('2026-09-10T12:00:00.000Z') },
+      { id: 'appointment-1', startAt: new Date('2026-08-10T12:00:00.000Z') },
+    ]);
+    db.sale.aggregate.mockResolvedValue({ _sum: { total: 425.5 } });
+
+    const result = await service.customerDetails('customer-1');
+
+    expect(result.metrics).toEqual({
+      visits: 2,
+      totalSpent: 425.5,
+      lastVisit: new Date('2026-09-10T12:00:00.000Z'),
+    });
+    expect(db.sale.aggregate).toHaveBeenCalledWith({
+      where: { barbershopId: 'shop-1', customerId: 'customer-1' },
+      _sum: { total: true },
+    });
   });
 
   it('não revela ficha de cliente de outro tenant', async () => {
