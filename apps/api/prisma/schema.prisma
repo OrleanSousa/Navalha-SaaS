@@ -62,6 +62,13 @@ enum CommissionStatus {
   PAID
 }
 
+enum EmployeeUnavailabilityType {
+  DAY_OFF
+  VACATION
+  LEAVE
+  BLOCK
+}
+
 enum SubscriptionStatus {
   TRIAL
   ACTIVE
@@ -277,41 +284,42 @@ model SubscriptionPayment {
 }
 
 model Barbershop {
-  id                    String                    @id @default(uuid())
-  name                  String
-  tradeName             String?
-  slug                  String                    @unique
-  document              String?
-  ownerName             String
-  phone                 String?
-  whatsapp              String?
-  email                 String?
-  address               String?
-  city                  String?
-  state                 String?
-  zipCode               String?
-  logoUrl               String?
-  primaryColor          String                    @default("#B8832B")
-  status                BarbershopStatus          @default(TRIAL)
-  users                 User[]
-  employees             Employee[]
-  customers             Customer[]
-  services              Service[]
-  products              Product[]
-  appointments          Appointment[]
-  sales                 Sale[]
-  financialTransactions FinancialTransaction[]
-  cashRegisters         CashRegister[]
-  commissions           Commission[]
-  notifications         Notification[]
-  auditLogs             AuditLog[]
-  subscriptionInvoices  SubscriptionInvoice[]
-  couponRedemptions     BillingCouponRedemption[]
-  subscription          Subscription?
-  settings              Setting?
-  createdAt             DateTime                  @default(now())
-  updatedAt             DateTime                  @updatedAt
-  deletedAt             DateTime?
+  id                       String                    @id @default(uuid())
+  name                     String
+  tradeName                String?
+  slug                     String                    @unique
+  document                 String?
+  ownerName                String
+  phone                    String?
+  whatsapp                 String?
+  email                    String?
+  address                  String?
+  city                     String?
+  state                    String?
+  zipCode                  String?
+  logoUrl                  String?
+  primaryColor             String                    @default("#B8832B")
+  status                   BarbershopStatus          @default(TRIAL)
+  users                    User[]
+  employees                Employee[]
+  employeeUnavailabilities EmployeeUnavailability[]
+  customers                Customer[]
+  services                 Service[]
+  products                 Product[]
+  appointments             Appointment[]
+  sales                    Sale[]
+  financialTransactions    FinancialTransaction[]
+  cashRegisters            CashRegister[]
+  commissions              Commission[]
+  notifications            Notification[]
+  auditLogs                AuditLog[]
+  subscriptionInvoices     SubscriptionInvoice[]
+  couponRedemptions        BillingCouponRedemption[]
+  subscription             Subscription?
+  settings                 Setting?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  deletedAt                DateTime?
 }
 
 model Session {
@@ -396,9 +404,9 @@ model RolePermission {
 }
 
 model Employee {
-  id                String            @id @default(uuid())
+  id                String                   @id @default(uuid())
   barbershopId      String
-  userId            String?           @unique
+  userId            String?                  @unique
   name              String
   cpf               String?
   birthDate         DateTime?
@@ -409,19 +417,20 @@ model Employee {
   photoUrl          String?
   position          String?
   hiredAt           DateTime?
-  color             String            @default("#4F7CAC")
-  active            Boolean           @default(true)
-  defaultCommission Decimal           @default(0) @db.Decimal(5, 2)
+  color             String                   @default("#4F7CAC")
+  active            Boolean                  @default(true)
+  defaultCommission Decimal                  @default(0) @db.Decimal(5, 2)
   notes             String?
-  barbershop        Barbershop        @relation(fields: [barbershopId], references: [id])
-  user              User?             @relation(fields: [userId], references: [id])
+  barbershop        Barbershop               @relation(fields: [barbershopId], references: [id])
+  user              User?                    @relation(fields: [userId], references: [id])
   appointments      Appointment[]
   employeeServices  EmployeeService[]
   sales             Sale[]
   commissions       Commission[]
   schedules         WorkSchedule[]
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt
+  unavailabilities  EmployeeUnavailability[]
+  createdAt         DateTime                 @default(now())
+  updatedAt         DateTime                 @updatedAt
   deletedAt         DateTime?
 
   @@index([barbershopId, name])
@@ -441,6 +450,24 @@ model WorkSchedule {
 
   @@unique([employeeId, weekday, startTime])
   @@index([barbershopId])
+}
+
+model EmployeeUnavailability {
+  id           String                     @id @default(uuid())
+  barbershopId String
+  employeeId   String
+  type         EmployeeUnavailabilityType
+  startAt      DateTime
+  endAt        DateTime
+  allDay       Boolean                    @default(false)
+  reason       String?
+  employee     Employee                   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  barbershop   Barbershop                 @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  createdAt    DateTime                   @default(now())
+  updatedAt    DateTime                   @updatedAt
+
+  @@index([barbershopId, startAt, endAt])
+  @@index([employeeId, startAt, endAt])
 }
 
 model Customer {

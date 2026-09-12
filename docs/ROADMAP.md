@@ -125,7 +125,7 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 - [x] 5.1 CRUD de jornada semanal por colaborador
 - [x] 5.2 Validar intervalos e sobreposições da jornada
-- [ ] 5.3 Criar entidade de bloqueio/indisponibilidade
+- [x] 5.3 Criar entidade de bloqueio/indisponibilidade
 - [ ] 5.4 Cadastrar folga
 - [ ] 5.5 Cadastrar férias e afastamentos
 - [ ] 5.6 Cadastrar bloqueios pontuais de agenda
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Continuar a **Etapa 5** criando a entidade de bloqueio/indisponibilidade (item 5.3). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Continuar a **Etapa 5** com o cadastro de folgas (item 5.4). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
