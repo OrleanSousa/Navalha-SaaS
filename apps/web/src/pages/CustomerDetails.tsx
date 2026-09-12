@@ -51,6 +51,14 @@ type CustomerDetailsResponse = {
     totalSpent: number;
     lastVisit?: string | null;
   };
+  nextAppointment?: {
+    id: string;
+    startAt: string;
+    endAt: string;
+    status: string;
+    employee: { id: string; name: string };
+    services: Array<{ service: { id: string; name: string } }>;
+  } | null;
 };
 
 function formatDate(value?: string | null) {
@@ -128,6 +136,32 @@ export function CustomerDetails() {
           </span>
         </div>
       </div>
+
+      <section className="customer-next-appointment">
+        <CalendarCheck />
+        <div>
+          <small>Próximo agendamento</small>
+          {data.nextAppointment ? (
+            <>
+              <h3>
+                {new Intl.DateTimeFormat('pt-BR', {
+                  dateStyle: 'full',
+                  timeStyle: 'short',
+                }).format(new Date(data.nextAppointment.startAt))}
+              </h3>
+              <p>
+                {data.nextAppointment.services.map(({ service }) => service.name).join(', ')} com{' '}
+                {data.nextAppointment.employee.name}
+              </p>
+            </>
+          ) : (
+            <>
+              <h3>Nenhum agendamento futuro</h3>
+              <p>Não há horários agendados ou confirmados.</p>
+            </>
+          )}
+        </div>
+      </section>
 
       <section className="customer-contact-band">
         <div>

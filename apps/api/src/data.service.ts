@@ -247,10 +247,28 @@ export class DataService {
       where: { barbershopId: this.tenant.barbershopId, customerId: customer.id },
       _sum: { total: true },
     });
+    const nextAppointment = await this.db.appointment.findFirst({
+      where: {
+        barbershopId: this.tenant.barbershopId,
+        customerId: customer.id,
+        startAt: { gte: new Date() },
+        status: { in: ['SCHEDULED', 'CONFIRMED'] },
+      },
+      select: {
+        id: true,
+        startAt: true,
+        endAt: true,
+        status: true,
+        employee: { select: { id: true, name: true } },
+        services: { select: { service: { select: { id: true, name: true } } } },
+      },
+      orderBy: { startAt: 'asc' },
+    });
     return {
       customer,
       serviceHistory,
       productPurchases,
+      nextAppointment,
       metrics: {
         visits: serviceHistory.length,
         totalSpent: Number(spending._sum.total || 0),

@@ -53,6 +53,7 @@ describe('DataService tenant isolation', () => {
       product: { findMany: jest.fn().mockResolvedValue([]) },
       appointment: {
         findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn().mockResolvedValue(null),
         count: jest.fn().mockResolvedValue(0),
       },
       sale: {
@@ -349,6 +350,26 @@ describe('DataService tenant isolation', () => {
       where: { barbershopId: 'shop-1', customerId: 'customer-1' },
       _sum: { total: true },
     });
+  });
+
+  it('retorna o próximo agendamento válido do cliente', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1', name: 'Ana' });
+    db.appointment.findFirst.mockResolvedValue({ id: 'next-appointment' });
+
+    const result = await service.customerDetails('customer-1');
+
+    expect(result.nextAppointment).toEqual({ id: 'next-appointment' });
+    expect(db.appointment.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          barbershopId: 'shop-1',
+          customerId: 'customer-1',
+          startAt: { gte: expect.any(Date) },
+          status: { in: ['SCHEDULED', 'CONFIRMED'] },
+        }),
+        orderBy: { startAt: 'asc' },
+      }),
+    );
   });
 
   it('não revela ficha de cliente de outro tenant', async () => {
