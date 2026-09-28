@@ -6,7 +6,9 @@ describe('AvailabilityService', () => {
 
   beforeEach(() => {
     db = {
-      employee: { findFirst: jest.fn().mockResolvedValue({ id: 'employee-1' }) },
+      employee: {
+        findFirst: jest.fn().mockResolvedValue({ id: 'employee-1', _count: { schedules: 0 } }),
+      },
       setting: {
         findUnique: jest.fn().mockResolvedValue({ timezone: 'America/Sao_Paulo' }),
       },
@@ -114,6 +116,40 @@ describe('AvailabilityService', () => {
       date: '2026-09-14',
       durationMinutes: 90,
       stepMinutes: 15,
+    });
+
+    expect(result.slots).toEqual([]);
+  });
+
+  it('usa o horário geral do tenant quando o profissional não possui jornada própria', async () => {
+    db.setting.findUnique.mockResolvedValue({
+      timezone: 'America/Sao_Paulo',
+      openingHours: { mon: ['08:00', '10:00'] },
+    });
+
+    const result = await service.employeeSlotsForTenant('shop-1', 'employee-1', {
+      date: '2026-09-14',
+      durationMinutes: 60,
+      stepMinutes: 60,
+    });
+
+    expect(result.slots).toEqual([
+      { startAt: '2026-09-14T11:00:00.000Z', endAt: '2026-09-14T12:00:00.000Z' },
+      { startAt: '2026-09-14T12:00:00.000Z', endAt: '2026-09-14T13:00:00.000Z' },
+    ]);
+  });
+
+  it('não usa o horário geral em folgas de quem possui jornada própria', async () => {
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1', _count: { schedules: 1 } });
+    db.setting.findUnique.mockResolvedValue({
+      timezone: 'America/Sao_Paulo',
+      openingHours: { mon: ['08:00', '18:00'] },
+    });
+
+    const result = await service.employeeSlotsForTenant('shop-1', 'employee-1', {
+      date: '2026-09-14',
+      durationMinutes: 30,
+      stepMinutes: 30,
     });
 
     expect(result.slots).toEqual([]);

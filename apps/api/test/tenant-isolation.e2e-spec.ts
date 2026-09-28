@@ -280,6 +280,11 @@ describe('Isolamento multi-tenant (e2e)', () => {
         create: { barbershopId: shopAId, publicBooking: true },
         update: { publicBooking: true },
       });
+      await db.setting.upsert({
+        where: { barbershopId: shopBId },
+        create: { barbershopId: shopBId, publicBooking: true },
+        update: { publicBooking: true },
+      });
       const publicService = await db.service.create({
         data: {
           barbershopId: shopAId,
@@ -312,6 +317,9 @@ describe('Isolamento multi-tenant (e2e)', () => {
         .get(`/api/public/booking/tenant-a-${suffix}/services/${serviceId}/professionals`)
         .expect(200);
       expect(professionals.body.map((item: { id: string }) => item.id)).toContain(employeeAId);
+      await request(app.getHttpServer())
+        .get(`/api/public/booking/tenant-b-${suffix}/services/${serviceId}/professionals`)
+        .expect(404);
 
       const availability = await request(app.getHttpServer())
         .get(`/api/public/booking/tenant-a-${suffix}/availability`)

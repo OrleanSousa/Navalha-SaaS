@@ -32,11 +32,14 @@ export class AvailabilityService {
     const [employee, settings] = await Promise.all([
       this.db.employee.findFirst({
         where: { id: employeeId, barbershopId, active: true, deletedAt: null },
-        select: { id: true },
+        select: {
+          id: true,
+          _count: { select: { schedules: true } },
+        },
       }),
       this.db.setting.findUnique({
         where: { barbershopId },
-        select: { timezone: true },
+        select: { timezone: true, openingHours: true },
       }),
     ]);
     if (!employee) throw new NotFoundException('Colaborador não encontrado');
@@ -54,7 +57,7 @@ export class AvailabilityService {
     const dayEnd = this.zonedDateTimeToUtc(nextDate, '00:00', timezone);
     const weekday = calendarDay.getUTCDay();
 
-    const [schedules, unavailabilities, appointments] = await Promise.all([
+    const [employeeSchedules, unavailabilities, appointments] = await Promise.all([
       this.db.workSchedule.findMany({
         where: { barbershopId, employeeId, weekday, active: true },
         orderBy: { startTime: 'asc' },
@@ -83,6 +86,10 @@ export class AvailabilityService {
         orderBy: { startAt: 'asc' },
       }),
     ]);
+    const schedules =
+      employeeSchedules.length || (employee._count?.schedules || 0) > 0
+        ? employeeSchedules
+        : this.generalSchedules(settings?.openingHours, weekday);
 
     if (unavailabilities.some(({ allDay }) => allDay)) {
       return {
@@ -180,6 +187,28 @@ export class AvailabilityService {
   private timeToMinutes(value: string) {
     const [hours, minutes] = value.split(':').map(Number);
     return hours * 60 + minutes;
+  }
+
+  private generalSchedules(openingHours: unknown, weekday: number) {
+    if (!openingHours || typeof openingHours !== 'object' || Array.isArray(openingHours)) return [];
+    const day = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'][weekday];
+    const interval = (openingHours as Record<string, unknown>)[day];
+    if (
+      !Array.isArray(interval) ||
+      interval.length !== 2 ||
+      typeof interval[0] !== 'string' ||
+      typeof interval[1] !== 'string'
+    ) {
+      return [];
+    }
+    return [
+      {
+        startTime: interval[0],
+        endTime: interval[1],
+        breakStart: null,
+        breakEnd: null,
+      },
+    ];
   }
 
   private minutesToTime(value: number) {

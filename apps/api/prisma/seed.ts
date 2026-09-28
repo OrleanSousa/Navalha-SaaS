@@ -152,6 +152,15 @@ async function main() {
       },
     });
   }
+  const demoOpeningHours = {
+    mon: ['08:00', '18:00'],
+    tue: ['08:00', '18:00'],
+    wed: ['08:00', '18:00'],
+    thu: ['08:00', '18:00'],
+    fri: ['08:00', '18:00'],
+    sat: ['08:00', '14:00'],
+    sun: null,
+  };
   const shop = await db.barbershop.upsert({
     where: { slug: 'barbearia-modelo' },
     update: {},
@@ -166,8 +175,13 @@ async function main() {
       state: 'SP',
       status: BarbershopStatus.ACTIVE,
       subscription: { create: { planId: plan.id, status: 'ACTIVE' } },
-      settings: { create: { openingHours: { mon: ['08:00', '18:00'], tue: ['08:00', '18:00'] } } },
+      settings: { create: { openingHours: demoOpeningHours } },
     },
+  });
+  await db.setting.upsert({
+    where: { barbershopId: shop.id },
+    create: { barbershopId: shop.id, openingHours: demoOpeningHours },
+    update: { openingHours: demoOpeningHours, publicBooking: true },
   });
   const passwordHash = await bcrypt.hash('Admin@123', 12);
   await db.user.upsert({
