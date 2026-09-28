@@ -3,6 +3,7 @@ import { CalendarDays, Check, ChevronLeft, Clock, MapPin, Scissors, UserRound } 
 import { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api, assetUrl } from '../lib/api';
+import { maskPhone } from '../lib/masks';
 import './PublicBooking.css';
 
 type Service = {
@@ -271,7 +272,8 @@ export function PublicBooking() {
               <input
                 value={whatsapp}
                 maxLength={20}
-                onChange={(event) => setWhatsapp(event.target.value)}
+                inputMode="numeric"
+                onChange={(event) => setWhatsapp(maskPhone(event.target.value))}
                 placeholder="(11) 99999-9999"
               />
             </label>

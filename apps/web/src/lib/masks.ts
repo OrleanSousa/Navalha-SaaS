@@ -24,3 +24,11 @@ export function maskPhone(value: string) {
   }
   return valueDigits.replace(/^(\d{2})(\d)/, '($1) $2').replace(/(\d{5})(\d)/, '$1-$2');
 }
+
+export function maskCpfCnpj(value: string) {
+  return digits(value, 14).length <= 11 ? maskCpf(value) : maskCnpj(value);
+}
+
+export function maskCep(value: string) {
+  return digits(value, 8).replace(/^(\d{5})(\d)/, '$1-$2');
+}

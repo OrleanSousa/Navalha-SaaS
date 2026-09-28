@@ -14,6 +14,7 @@ import {
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { api, money } from '../lib/api';
+import { maskPhone } from '../lib/masks';
 import { useAuth } from '../lib/auth';
 import { Permissions } from '../lib/permissions';
 
@@ -335,7 +336,7 @@ export function Agenda() {
                 <option value="">Selecione</option>
                 {options?.customers.map((customer) => (
                   <option key={customer.id} value={customer.id}>
-                    {customer.name} · {customer.phone}
+                    {customer.name} · {maskPhone(customer.phone)}
                   </option>
                 ))}
               </select>

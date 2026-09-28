@@ -23,6 +23,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api, assetUrl, money } from '../lib/api';
+import { maskCpf, maskPhone } from '../lib/masks';
 import { useAuth } from '../lib/auth';
 import { Permissions } from '../lib/permissions';
 
@@ -366,7 +367,11 @@ export function EmployeeDetails() {
               <dt>
                 <Phone /> Telefone
               </dt>
-              <dd>{employee.whatsapp || employee.phone || 'Não informado'}</dd>
+              <dd>
+                {employee.whatsapp || employee.phone
+                  ? maskPhone(employee.whatsapp || employee.phone || '')
+                  : 'Não informado'}
+              </dd>
             </div>
             <div>
               <dt>
@@ -378,7 +383,7 @@ export function EmployeeDetails() {
               <dt>
                 <UserRound /> CPF
               </dt>
-              <dd>{employee.cpf || 'Não informado'}</dd>
+              <dd>{employee.cpf ? maskCpf(employee.cpf) : 'Não informado'}</dd>
             </div>
             <div>
               <dt>

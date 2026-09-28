@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 import { api, money } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Permissions } from '../lib/permissions';
+import { maskCpfCnpj, maskPhone } from '../lib/masks';
 import './Accounts.css';
 
 type AccountType = 'PAYABLE' | 'RECEIVABLE';
@@ -792,8 +793,12 @@ function Registers({ onChanged }: { onChanged: () => Promise<void> }) {
           />
           <input
             placeholder="CPF/CNPJ"
+            inputMode="numeric"
+            maxLength={18}
             value={supplier.document}
-            onChange={(event) => setSupplier({ ...supplier, document: event.target.value })}
+            onChange={(event) =>
+              setSupplier({ ...supplier, document: maskCpfCnpj(event.target.value) })
+            }
           />
           <input
             placeholder="Contato"
@@ -802,8 +807,10 @@ function Registers({ onChanged }: { onChanged: () => Promise<void> }) {
           />
           <input
             placeholder="Telefone"
+            inputMode="numeric"
+            maxLength={15}
             value={supplier.phone}
-            onChange={(event) => setSupplier({ ...supplier, phone: event.target.value })}
+            onChange={(event) => setSupplier({ ...supplier, phone: maskPhone(event.target.value) })}
           />
           <input
             type="email"
@@ -819,7 +826,9 @@ function Registers({ onChanged }: { onChanged: () => Promise<void> }) {
               <UserRound />
               <span>
                 <b>{item.name}</b>
-                <small>{item.document || item.email || 'Sem documento'}</small>
+                <small>
+                  {item.document ? maskCpfCnpj(item.document) : item.email || 'Sem documento'}
+                </small>
               </span>
               <button
                 className="icon"
@@ -827,9 +836,9 @@ function Registers({ onChanged }: { onChanged: () => Promise<void> }) {
                   setEditingSupplier(item);
                   setSupplier({
                     name: item.name,
-                    document: item.document || '',
+                    document: maskCpfCnpj(item.document || ''),
                     contactName: item.contactName || '',
-                    phone: item.phone || '',
+                    phone: maskPhone(item.phone || ''),
                     email: item.email || '',
                   });
                 }}

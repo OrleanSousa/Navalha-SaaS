@@ -18,6 +18,7 @@ import { toast } from 'sonner';
 import { api, money } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Permissions } from '../lib/permissions';
+import { maskCpf, maskPhone } from '../lib/masks';
 
 type Customer = {
   id: string;
@@ -147,10 +148,10 @@ export function Customers() {
     setShowForm(true);
     setForm({
       name: customer.name,
-      phone: customer.phone,
-      whatsapp: customer.whatsapp || '',
+      phone: maskPhone(customer.phone),
+      whatsapp: maskPhone(customer.whatsapp || ''),
       email: customer.email || '',
-      cpf: customer.cpf || '',
+      cpf: maskCpf(customer.cpf || ''),
       birthDate: customer.birthDate?.slice(0, 10) || '',
       notes: customer.notes || '',
     });
@@ -257,17 +258,19 @@ export function Customers() {
             Telefone
             <input
               required
-              maxLength={30}
+              inputMode="numeric"
+              maxLength={15}
               value={form.phone}
-              onChange={(event) => setForm({ ...form, phone: event.target.value })}
+              onChange={(event) => setForm({ ...form, phone: maskPhone(event.target.value) })}
             />
           </label>
           <label>
             WhatsApp
             <input
-              maxLength={30}
+              inputMode="numeric"
+              maxLength={15}
               value={form.whatsapp}
-              onChange={(event) => setForm({ ...form, whatsapp: event.target.value })}
+              onChange={(event) => setForm({ ...form, whatsapp: maskPhone(event.target.value) })}
             />
           </label>
           <label>
@@ -282,9 +285,10 @@ export function Customers() {
           <label>
             CPF
             <input
-              maxLength={20}
+              inputMode="numeric"
+              maxLength={14}
               value={form.cpf}
-              onChange={(event) => setForm({ ...form, cpf: event.target.value })}
+              onChange={(event) => setForm({ ...form, cpf: maskCpf(event.target.value) })}
             />
           </label>
           <label>
@@ -378,7 +382,7 @@ export function Customers() {
                 </td>
                 <td>
                   <small>
-                    <Phone /> {customer.phone}
+                    <Phone /> {maskPhone(customer.phone)}
                   </small>
                 </td>
                 <td>{customer._count?.appointments || 0}</td>

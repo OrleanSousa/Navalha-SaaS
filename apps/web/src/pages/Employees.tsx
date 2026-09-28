@@ -23,6 +23,7 @@ import { toast } from 'sonner';
 import { api, assetUrl } from '../lib/api';
 import { useAuth } from '../lib/auth';
 import { Permissions } from '../lib/permissions';
+import { maskCpf, maskPhone } from '../lib/masks';
 
 type Employee = {
   id: string;
@@ -266,10 +267,10 @@ export function Employees() {
     setCurrentPhotoUrl(assetUrl(employee.photoUrl));
     setForm({
       name: employee.name,
-      cpf: employee.cpf || '',
+      cpf: maskCpf(employee.cpf || ''),
       birthDate: employee.birthDate?.slice(0, 10) || '',
-      phone: employee.phone || '',
-      whatsapp: employee.whatsapp || '',
+      phone: maskPhone(employee.phone || ''),
+      whatsapp: maskPhone(employee.whatsapp || ''),
       email: employee.email || '',
       address: employee.address || '',
       position: employee.position || '',
@@ -614,8 +615,9 @@ export function Employees() {
               CPF
               <input
                 value={form.cpf}
-                onChange={(event) => setForm({ ...form, cpf: event.target.value })}
-                maxLength={20}
+                onChange={(event) => setForm({ ...form, cpf: maskCpf(event.target.value) })}
+                inputMode="numeric"
+                maxLength={14}
               />
             </label>
             <label>
@@ -630,16 +632,18 @@ export function Employees() {
               Telefone
               <input
                 value={form.phone}
-                onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                maxLength={30}
+                onChange={(event) => setForm({ ...form, phone: maskPhone(event.target.value) })}
+                inputMode="numeric"
+                maxLength={15}
               />
             </label>
             <label>
               WhatsApp
               <input
                 value={form.whatsapp}
-                onChange={(event) => setForm({ ...form, whatsapp: event.target.value })}
-                maxLength={30}
+                onChange={(event) => setForm({ ...form, whatsapp: maskPhone(event.target.value) })}
+                inputMode="numeric"
+                maxLength={15}
               />
             </label>
             <label>
@@ -784,7 +788,10 @@ export function Employees() {
                   <td>
                     <div className="employee-contact">
                       <small>
-                        <Phone /> {employee.whatsapp || employee.phone || 'Não informado'}
+                        <Phone />{' '}
+                        {employee.whatsapp || employee.phone
+                          ? maskPhone(employee.whatsapp || employee.phone || '')
+                          : 'Não informado'}
                       </small>
                       <small>
                         <Mail /> {employee.email || employee.user?.email || 'Não informado'}

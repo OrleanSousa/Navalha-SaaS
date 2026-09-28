@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { Link, useParams } from 'react-router-dom';
 import { api, money } from '../lib/api';
+import { maskCpf, maskPhone } from '../lib/masks';
 
 type CustomerDetailsResponse = {
   customer: {
@@ -168,14 +169,14 @@ export function CustomerDetails() {
           <Phone />
           <span>
             <small>Telefone</small>
-            <b>{customer.phone}</b>
+            <b>{maskPhone(customer.phone)}</b>
           </span>
         </div>
         <div>
           <Phone />
           <span>
             <small>WhatsApp</small>
-            <b>{customer.whatsapp || 'Não informado'}</b>
+            <b>{customer.whatsapp ? maskPhone(customer.whatsapp) : 'Não informado'}</b>
           </span>
         </div>
         <div>
@@ -189,7 +190,7 @@ export function CustomerDetails() {
           <UserRound />
           <span>
             <small>CPF</small>
-            <b>{customer.cpf || 'Não informado'}</b>
+            <b>{customer.cpf ? maskCpf(customer.cpf) : 'Não informado'}</b>
           </span>
         </div>
         <div>

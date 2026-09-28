@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { api, assetUrl } from '../lib/api';
+import { maskCep, maskCpfCnpj, maskPhone } from '../lib/masks';
 import './Settings.css';
 
 const days = [
@@ -26,6 +27,17 @@ type SettingsData = {
   };
 };
 const errorMessage = (error: any, fallback: string) => error.response?.data?.message || fallback;
+const formatBusinessField = (field: string, value: string) => {
+  if (field === 'document') return maskCpfCnpj(value);
+  if (field === 'phone' || field === 'whatsapp') return maskPhone(value);
+  if (field === 'zipCode') return maskCep(value);
+  if (field === 'state')
+    return value
+      .replace(/[^a-z]/gi, '')
+      .slice(0, 2)
+      .toUpperCase();
+  return value;
+};
 
 function useSettingsMutation(
   fn: () => Promise<any>,
@@ -65,15 +77,15 @@ export function Settings() {
     setBusiness({
       name: shop.name || '',
       tradeName: shop.tradeName || '',
-      document: shop.document || '',
+      document: maskCpfCnpj(shop.document || ''),
       ownerName: shop.ownerName || '',
-      phone: shop.phone || '',
-      whatsapp: shop.whatsapp || '',
+      phone: maskPhone(shop.phone || ''),
+      whatsapp: maskPhone(shop.whatsapp || ''),
       email: shop.email || '',
       address: shop.address || '',
       city: shop.city || '',
       state: shop.state || '',
-      zipCode: shop.zipCode || '',
+      zipCode: maskCep(shop.zipCode || ''),
       primaryColor: shop.primaryColor || '#B8832B',
     });
     setRegional({ currency: query.data.settings.currency, timezone: query.data.settings.timezone });
@@ -254,8 +266,29 @@ export function Settings() {
               {label}
               <input
                 required={['name', 'ownerName'].includes(field)}
+                inputMode={
+                  ['document', 'phone', 'whatsapp', 'zipCode'].includes(field)
+                    ? 'numeric'
+                    : undefined
+                }
+                maxLength={
+                  field === 'document'
+                    ? 18
+                    : field === 'phone' || field === 'whatsapp'
+                      ? 15
+                      : field === 'zipCode'
+                        ? 9
+                        : field === 'state'
+                          ? 2
+                          : undefined
+                }
                 value={business[field] || ''}
-                onChange={(event) => setBusiness({ ...business, [field]: event.target.value })}
+                onChange={(event) =>
+                  setBusiness({
+                    ...business,
+                    [field]: formatBusinessField(field, event.target.value),
+                  })
+                }
               />
             </label>
           ))}
