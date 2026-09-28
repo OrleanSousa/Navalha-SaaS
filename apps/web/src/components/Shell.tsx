@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Outlet, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { Permissions, type PermissionKey } from '../lib/permissions';
+import { api, assetUrl } from '../lib/api';
 import {
   LayoutDashboard,
   CalendarDays,
@@ -37,17 +39,32 @@ const items = [
   ['/contas', 'Contas', Landmark, Permissions.ACCOUNTS_READ],
   ['/comissoes', 'Comissões', BadgeDollarSign, Permissions.COMMISSIONS_READ],
   ['/relatorios', 'Relatórios', ChartNoAxesCombined, Permissions.REPORTS_READ],
-  ['/configuracoes', 'Configurações', Settings],
+  ['/configuracoes', 'Configurações', Settings, Permissions.SETTINGS_READ],
 ] as ReadonlyArray<readonly [string, string, typeof LayoutDashboard, PermissionKey?]>;
 export function Shell() {
   const { user, logout, can } = useAuth();
   const [open, setOpen] = useState(false);
   const loc = useLocation();
+  const { data: workspace } = useQuery<{
+    name: string;
+    tradeName?: string;
+    logoUrl?: string;
+    primaryColor: string;
+    primaryTextColor: string;
+  }>({ queryKey: ['workspace'], queryFn: async () => (await api.get('/workspace')).data });
   const title =
     items.find((x) => x[0] === loc.pathname)?.[1] ||
     (loc.pathname.startsWith('/colaboradores/') ? 'Colaborador' : 'Navalha');
   return (
-    <div className="app">
+    <div
+      className="app"
+      style={
+        {
+          '--brand-color': workspace?.primaryColor || '#B8832B',
+          '--brand-text': workspace?.primaryTextColor || '#FFFFFF',
+        } as React.CSSProperties
+      }
+    >
       <aside className={open ? 'sidebar open' : 'sidebar'}>
         <div className="brand">
           <span className="brandmark">
@@ -62,9 +79,17 @@ export function Shell() {
           </button>
         </div>
         <div className="shop">
-          <span>BM</span>
+          <span>
+            {workspace?.logoUrl ? (
+              <img src={assetUrl(workspace.logoUrl)} alt="" />
+            ) : (
+              (workspace?.name || user?.barbershop || 'MB').slice(0, 2).toUpperCase()
+            )}
+          </span>
           <div>
-            <b>{user?.barbershop || 'Minha barbearia'}</b>
+            <b>
+              {workspace?.tradeName || workspace?.name || user?.barbershop || 'Minha barbearia'}
+            </b>
             <small>Ambiente de gestão</small>
           </div>
         </div>

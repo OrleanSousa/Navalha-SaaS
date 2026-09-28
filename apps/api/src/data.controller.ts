@@ -54,6 +54,11 @@ import {
   SetExpenseRecurrenceStatusDto,
   DashboardQuery,
   ReportsQuery,
+  UpdateBusinessSettingsDto,
+  UpdateRegionalSettingsDto,
+  UpdateOpeningHoursDto,
+  UpdateOperationalSettingsDto,
+  CompleteOnboardingStepDto,
   ConfigureServiceProfessionalDto,
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
@@ -695,5 +700,78 @@ export class DataController {
   @RequirePermissions(Permissions.REPORTS_READ)
   reports(@Query() query: ReportsQuery) {
     return this.data.reports(query);
+  }
+
+  @Get('workspace')
+  workspace() {
+    return this.data.workspace();
+  }
+
+  @Get('settings')
+  @RequirePermissions(Permissions.SETTINGS_READ)
+  settings() {
+    return this.data.settings();
+  }
+
+  @Patch('settings/business')
+  @RequirePermissions(Permissions.SETTINGS_MANAGE)
+  updateBusinessSettings(@Body() dto: UpdateBusinessSettingsDto) {
+    return this.data.updateBusinessSettings(dto);
+  }
+
+  @Post('settings/logo')
+  @RequirePermissions(Permissions.SETTINGS_MANAGE)
+  @UseInterceptors(
+    FileInterceptor('logo', {
+      storage: memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024, files: 1 },
+      fileFilter: (_request, file, callback) => {
+        if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+          callback(new BadRequestException('Envie uma imagem JPEG, PNG ou WebP'), false);
+          return;
+        }
+        callback(null, true);
+      },
+    }),
+  )
+  uploadBarbershopLogo(@UploadedFile() logo?: Express.Multer.File) {
+    if (!logo) throw new BadRequestException('Selecione uma imagem');
+    return this.data.uploadBarbershopLogo(logo);
+  }
+
+  @Patch('settings/regional')
+  @RequirePermissions(Permissions.SETTINGS_MANAGE)
+  updateRegionalSettings(@Body() dto: UpdateRegionalSettingsDto) {
+    return this.data.updateRegionalSettings(dto);
+  }
+
+  @Patch('settings/opening-hours')
+  @RequirePermissions(Permissions.SETTINGS_MANAGE)
+  updateOpeningHours(@Body() dto: UpdateOpeningHoursDto) {
+    return this.data.updateOpeningHours(dto);
+  }
+
+  @Patch('settings/operational')
+  @RequirePermissions(Permissions.SETTINGS_MANAGE)
+  updateOperationalSettings(@Body() dto: UpdateOperationalSettingsDto) {
+    return this.data.updateOperationalSettings(dto);
+  }
+
+  @Post('settings/onboarding/complete-step')
+  @RequirePermissions(Permissions.SETTINGS_MANAGE)
+  completeOnboardingStep(@Body() dto: CompleteOnboardingStepDto) {
+    return this.data.completeOnboardingStep(dto.step);
+  }
+
+  @Post('settings/onboarding/dismiss')
+  @RequirePermissions(Permissions.SETTINGS_MANAGE)
+  dismissOnboarding() {
+    return this.data.setOnboardingDismissed(true);
+  }
+
+  @Post('settings/onboarding/resume')
+  @RequirePermissions(Permissions.SETTINGS_MANAGE)
+  resumeOnboarding() {
+    return this.data.setOnboardingDismissed(false);
   }
 }

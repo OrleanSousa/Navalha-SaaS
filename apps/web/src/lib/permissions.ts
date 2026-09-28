@@ -46,6 +46,8 @@ export const Permissions = {
   ACCOUNTS_MANAGE: 'accounts.manage',
   ACCOUNTS_SETTLE: 'accounts.settle',
   REPORTS_READ: 'reports.read',
+  SETTINGS_READ: 'settings.read',
+  SETTINGS_MANAGE: 'settings.manage',
 } as const;
 
 export type PermissionKey = (typeof Permissions)[keyof typeof Permissions];

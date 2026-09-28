@@ -283,15 +283,15 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Etapa 15 — Configurações e onboarding
 
-- [ ] 15.1 Editar dados e identidade da barbearia
-- [ ] 15.2 Upload de logo
-- [ ] 15.3 Aplicar cor principal com acessibilidade
-- [ ] 15.4 Configurar moeda e fuso horário
-- [ ] 15.5 Configurar horário geral de funcionamento
-- [ ] 15.6 Configurar estoque negativo e venda a prazo
-- [ ] 15.7 Criar estado de progresso do onboarding
-- [ ] 15.8 Implementar os cinco passos do primeiro acesso
-- [ ] 15.9 Permitir retomar ou dispensar onboarding
+- [x] 15.1 Editar dados e identidade da barbearia
+- [x] 15.2 Upload de logo
+- [x] 15.3 Aplicar cor principal com acessibilidade
+- [x] 15.4 Configurar moeda e fuso horário
+- [x] 15.5 Configurar horário geral de funcionamento
+- [x] 15.6 Configurar estoque negativo e venda a prazo
+- [x] 15.7 Criar estado de progresso do onboarding
+- [x] 15.8 Implementar os cinco passos do primeiro acesso
+- [x] 15.9 Permitir retomar ou dispensar onboarding
 
 ## Etapa 16 — Agendamento público
 

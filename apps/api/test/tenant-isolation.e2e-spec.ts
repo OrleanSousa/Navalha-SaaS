@@ -183,6 +183,74 @@ describe('Isolamento multi-tenant (e2e)', () => {
     return response.body.accessToken as string;
   }
 
+  it('configura a barbearia e persiste o progresso do onboarding', async () => {
+    const adminToken = await login(`admin-a-${suffix}@example.com`);
+    const receptionistToken = await login(`receptionist-a-${suffix}@example.com`);
+    const authorization = { Authorization: `Bearer ${adminToken}` };
+
+    await request(app.getHttpServer())
+      .patch('/api/settings/business')
+      .set(authorization)
+      .send({
+        name: `Navalha ${suffix}`,
+        ownerName: 'Responsável',
+        email: `contato-${suffix}@example.com`,
+        primaryColor: '#F5D547',
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch('/api/settings/opening-hours')
+      .set(authorization)
+      .send({
+        hours: ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => ({
+          day,
+          enabled: day !== 'sun',
+          start: '08:00',
+          end: '18:00',
+        })),
+      })
+      .expect(200);
+
+    await request(app.getHttpServer())
+      .patch('/api/settings/operational')
+      .set(authorization)
+      .send({ allowNegativeStock: false, allowCreditSales: true, publicBooking: true })
+      .expect(200);
+
+    const settings = await request(app.getHttpServer())
+      .get('/api/settings')
+      .set(authorization)
+      .expect(200);
+    expect(settings.body.barbershop).toEqual(
+      expect.objectContaining({ primaryColor: '#F5D547', primaryTextColor: '#000000' }),
+    );
+    expect(settings.body.settings.allowCreditSales).toBe(true);
+    expect(settings.body.onboarding.completedSteps).toEqual(
+      expect.arrayContaining(['BUSINESS', 'HOURS', 'TEAM', 'BOOKING']),
+    );
+
+    await request(app.getHttpServer())
+      .post('/api/settings/onboarding/dismiss')
+      .set(authorization)
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/api/settings/onboarding/resume')
+      .set(authorization)
+      .expect(201);
+
+    const workspace = await request(app.getHttpServer())
+      .get('/api/workspace')
+      .set('Authorization', `Bearer ${receptionistToken}`)
+      .expect(200);
+    expect(workspace.body.name).toBe(`Navalha ${suffix}`);
+
+    await request(app.getHttpServer())
+      .get('/api/settings')
+      .set('Authorization', `Bearer ${receptionistToken}`)
+      .expect(403);
+  });
+
   it('retorna somente registros pertencentes ao tenant do token', async () => {
     const tokenA = await login(`admin-a-${suffix}@example.com`);
     const tokenB = await login(`admin-b-${suffix}@example.com`);

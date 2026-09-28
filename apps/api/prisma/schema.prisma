@@ -82,6 +82,14 @@ enum RecurrenceFrequency {
   YEARLY
 }
 
+enum OnboardingStep {
+  BUSINESS
+  HOURS
+  TEAM
+  SERVICES
+  BOOKING
+}
+
 enum CommissionStatus {
   PENDING
   PAID
@@ -330,6 +338,7 @@ model Barbershop {
   zipCode                  String?
   logoUrl                  String?
   primaryColor             String                    @default("#B8832B")
+  primaryTextColor         String                    @default("#FFFFFF")
   status                   BarbershopStatus          @default(TRIAL)
   users                    User[]
   employees                Employee[]
@@ -355,6 +364,7 @@ model Barbershop {
   couponRedemptions        BillingCouponRedemption[]
   subscription             Subscription?
   settings                 Setting?
+  onboarding               OnboardingProgress?
   createdAt                DateTime                  @default(now())
   updatedAt                DateTime                  @updatedAt
   deletedAt                DateTime?
@@ -985,6 +995,7 @@ model Setting {
   currency                       String     @default("BRL")
   timezone                       String     @default("America/Sao_Paulo")
   allowNegativeStock             Boolean    @default(false)
+  allowCreditSales               Boolean    @default(false)
   publicBooking                  Boolean    @default(true)
   allowDuplicateCustomerPhone    Boolean    @default(false)
   allowDuplicateCustomerCpf      Boolean    @default(false)
@@ -992,4 +1003,15 @@ model Setting {
   openingHours                   Json?
   barbershop                     Barbershop @relation(fields: [barbershopId], references: [id])
   updatedAt                      DateTime   @updatedAt
+}
+
+model OnboardingProgress {
+  id             String           @id @default(uuid())
+  barbershopId   String           @unique
+  completedSteps OnboardingStep[] @default([])
+  dismissedAt    DateTime?
+  completedAt    DateTime?
+  barbershop     Barbershop       @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
 }

@@ -49,6 +49,8 @@ const permissionCatalog = [
   ['accounts.manage', 'Gerenciar fornecedores, categorias e contas'],
   ['accounts.settle', 'Registrar pagamentos e recebimentos'],
   ['reports.read', 'Visualizar e exportar relatórios'],
+  ['settings.read', 'Visualizar configurações da barbearia'],
+  ['settings.manage', 'Editar configurações da barbearia'],
 ] as const;
 async function seedPermissions() {
   const permissions = [];

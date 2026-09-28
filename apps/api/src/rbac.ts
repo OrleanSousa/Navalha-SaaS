@@ -59,6 +59,8 @@ export const Permissions = {
   ACCOUNTS_MANAGE: 'accounts.manage',
   ACCOUNTS_SETTLE: 'accounts.settle',
   REPORTS_READ: 'reports.read',
+  SETTINGS_READ: 'settings.read',
+  SETTINGS_MANAGE: 'settings.manage',
 } as const;
 
 export type PermissionKey = (typeof Permissions)[keyof typeof Permissions];
@@ -123,6 +125,8 @@ export const PERMISSION_CATALOG: ReadonlyArray<{
   },
   { key: Permissions.ACCOUNTS_SETTLE, description: 'Registrar pagamentos e recebimentos' },
   { key: Permissions.REPORTS_READ, description: 'Visualizar e exportar relatórios' },
+  { key: Permissions.SETTINGS_READ, description: 'Visualizar configurações da barbearia' },
+  { key: Permissions.SETTINGS_MANAGE, description: 'Editar configurações da barbearia' },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly PermissionKey[]> = {

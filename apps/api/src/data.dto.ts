@@ -6,6 +6,7 @@ import {
   FinancialCategoryType,
   FinancialType,
   MovementType,
+  OnboardingStep,
   PaymentMethod,
   Role,
   RecurrenceFrequency,
@@ -738,6 +739,62 @@ export class ReportsQuery {
 
   @IsDateString()
   end: string;
+}
+
+export class UpdateBusinessSettingsDto {
+  @IsString() @MinLength(2) @MaxLength(120) name: string;
+  @IsOptional() @IsString() @MaxLength(120) tradeName?: string;
+  @IsOptional() @IsString() @MaxLength(30) document?: string;
+  @IsString() @MinLength(2) @MaxLength(120) ownerName: string;
+  @IsOptional() @IsString() @MaxLength(30) phone?: string;
+  @IsOptional() @IsString() @MaxLength(30) whatsapp?: string;
+  @IsOptional() @IsEmail() @MaxLength(160) email?: string;
+  @IsOptional() @IsString() @MaxLength(240) address?: string;
+  @IsOptional() @IsString() @MaxLength(100) city?: string;
+  @IsOptional() @IsString() @MaxLength(2) state?: string;
+  @IsOptional() @IsString() @MaxLength(12) zipCode?: string;
+
+  @Matches(/^#[0-9A-Fa-f]{6}$/)
+  primaryColor: string;
+}
+
+export class UpdateRegionalSettingsDto {
+  @IsString() @Matches(/^[A-Z]{3}$/) currency: string;
+  @IsString() @MinLength(3) @MaxLength(80) timezone: string;
+}
+
+export class OpeningHourDto {
+  @Matches(/^(mon|tue|wed|thu|fri|sat|sun)$/)
+  day: string;
+
+  @IsBoolean()
+  enabled: boolean;
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  start: string;
+
+  @Matches(/^([01]\d|2[0-3]):[0-5]\d$/)
+  end: string;
+}
+
+export class UpdateOpeningHoursDto {
+  @IsArray()
+  @ArrayMinSize(7)
+  @ArrayUnique((entry: OpeningHourDto) => entry.day)
+  @ValidateNested({ each: true })
+  @Type(() => OpeningHourDto)
+  hours: OpeningHourDto[];
+}
+
+export class UpdateOperationalSettingsDto {
+  @IsBoolean() allowNegativeStock: boolean;
+  @IsBoolean() allowCreditSales: boolean;
+  @IsBoolean() publicBooking: boolean;
+}
+
+export class CompleteOnboardingStepDto {
+  @IsEnum(OnboardingStep)
+  step: OnboardingStep;
 }
 
 export class ListEmployeesQuery {

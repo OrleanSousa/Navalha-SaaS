@@ -16,7 +16,11 @@ describe('DataService tenant isolation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     db = {
-      barbershop: { findUnique: jest.fn().mockResolvedValue({ name: 'Barbearia Teste' }) },
+      barbershop: {
+        findUnique: jest.fn().mockResolvedValue({ name: 'Barbearia Teste' }),
+        findUniqueOrThrow: jest.fn(),
+        update: jest.fn(),
+      },
       customer: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn(),
@@ -51,8 +55,13 @@ describe('DataService tenant isolation', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         upsert: jest.fn(),
       },
+      onboardingProgress: {
+        upsert: jest.fn().mockResolvedValue({ completedSteps: [], completedAt: null }),
+        update: jest.fn(),
+      },
       service: {
         findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
         findFirst: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
@@ -1993,5 +2002,85 @@ describe('DataService tenant isolation', () => {
     await expect(service.reports({ start: '2025-01-01', end: '2026-09-01' })).rejects.toThrow(
       'O período está limitado a 370 dias',
     );
+  });
+
+  it('atualiza a identidade e escolhe uma cor de texto com contraste', async () => {
+    db.barbershop.update.mockResolvedValue({ id: 'shop-1' });
+
+    await service.updateBusinessSettings({
+      name: ' Navalha ',
+      ownerName: ' Proprietário ',
+      email: 'CONTATO@EXAMPLE.COM ',
+      primaryColor: '#F5D547',
+    } as any);
+
+    expect(db.barbershop.update).toHaveBeenCalledWith({
+      where: { id: 'shop-1' },
+      data: expect.objectContaining({
+        name: 'Navalha',
+        ownerName: 'Proprietário',
+        email: 'contato@example.com',
+        primaryColor: '#F5D547',
+        primaryTextColor: '#000000',
+      }),
+    });
+    expect(db.onboardingProgress.update).toHaveBeenCalledWith(
+      expect.objectContaining({ data: expect.objectContaining({ completedSteps: ['BUSINESS'] }) }),
+    );
+  });
+
+  it('salva os sete dias de funcionamento e avança o onboarding', async () => {
+    const hours = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => ({
+      day,
+      enabled: day !== 'sun',
+      start: '08:00',
+      end: '18:00',
+    }));
+    db.setting.upsert.mockResolvedValue({ openingHours: {} });
+
+    await service.updateOpeningHours({ hours } as any);
+
+    expect(db.setting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { barbershopId: 'shop-1' },
+        update: {
+          openingHours: expect.objectContaining({ mon: ['08:00', '18:00'], sun: null }),
+        },
+      }),
+    );
+    expect(db.onboardingProgress.update).toHaveBeenCalled();
+  });
+
+  it('rejeita intervalo de funcionamento e fuso horário inválidos', async () => {
+    const hours = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'].map((day) => ({
+      day,
+      enabled: true,
+      start: '18:00',
+      end: '08:00',
+    }));
+
+    await expect(service.updateOpeningHours({ hours } as any)).rejects.toThrow('Horário inválido');
+    await expect(
+      service.updateRegionalSettings({ currency: 'BRL', timezone: 'Fuso/Inexistente' } as any),
+    ).rejects.toThrow('Fuso horário inválido');
+  });
+
+  it('infere e persiste o progresso completo do onboarding', async () => {
+    db.barbershop.findUniqueOrThrow.mockResolvedValue({ name: 'Navalha', ownerName: 'Ana' });
+    db.setting.upsert.mockResolvedValue({ openingHours: {}, publicBooking: true });
+    db.employee.count.mockResolvedValue(1);
+    db.service.count.mockResolvedValue(1);
+    db.onboardingProgress.update.mockImplementation(({ data }: any) => ({ ...data }));
+
+    const result = await service.settings();
+
+    expect(result.onboarding.completedSteps).toEqual([
+      'BUSINESS',
+      'HOURS',
+      'TEAM',
+      'SERVICES',
+      'BOOKING',
+    ]);
+    expect(result.onboarding.completedAt).toBeInstanceOf(Date);
   });
 });

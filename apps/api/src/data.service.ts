@@ -51,6 +51,10 @@ import {
   AccountListStatus,
   DashboardQuery,
   ReportsQuery,
+  UpdateBusinessSettingsDto,
+  UpdateRegionalSettingsDto,
+  UpdateOpeningHoursDto,
+  UpdateOperationalSettingsDto,
   ListAppointmentsQuery,
   CreateProductCategoryDto,
   CreateProductDto,
@@ -3392,6 +3396,197 @@ export class DataService {
 
   private accountDate(value: string) {
     return this.parseDateOnly(value.slice(0, 10));
+  }
+
+  workspace() {
+    return this.db.barbershop.findUnique({
+      where: { id: this.tenant.barbershopId },
+      select: {
+        id: true,
+        name: true,
+        tradeName: true,
+        logoUrl: true,
+        primaryColor: true,
+        primaryTextColor: true,
+      },
+    });
+  }
+
+  async settings() {
+    const barbershopId = this.tenant.barbershopId;
+    const [barbershop, setting, onboarding, employees, services] = await Promise.all([
+      this.db.barbershop.findUniqueOrThrow({ where: { id: barbershopId } }),
+      this.db.setting.upsert({
+        where: { barbershopId },
+        update: {},
+        create: { barbershopId },
+      }),
+      this.db.onboardingProgress.upsert({
+        where: { barbershopId },
+        update: {},
+        create: { barbershopId },
+      }),
+      this.db.employee.count({ where: { barbershopId, deletedAt: null } }),
+      this.db.service.count({ where: { barbershopId, deletedAt: null } }),
+    ]);
+    const inferred = [
+      ...(barbershop.name && barbershop.ownerName ? ['BUSINESS'] : []),
+      ...(setting.openingHours ? ['HOURS'] : []),
+      ...(employees > 0 ? ['TEAM'] : []),
+      ...(services > 0 ? ['SERVICES'] : []),
+      ...(setting.publicBooking ? ['BOOKING'] : []),
+    ];
+    const completedSteps = [...new Set([...onboarding.completedSteps, ...inferred])] as any[];
+    const complete = completedSteps.length === 5;
+    const progress =
+      completedSteps.length !== onboarding.completedSteps.length ||
+      (complete && !onboarding.completedAt)
+        ? await this.db.onboardingProgress.update({
+            where: { barbershopId },
+            data: {
+              completedSteps,
+              completedAt: complete ? onboarding.completedAt || new Date() : null,
+            },
+          })
+        : onboarding;
+    return { barbershop, settings: setting, onboarding: progress };
+  }
+
+  async updateBusinessSettings(dto: UpdateBusinessSettingsDto) {
+    const primaryColor = dto.primaryColor.toUpperCase();
+    const primaryTextColor = this.accessibleTextColor(primaryColor);
+    const updated = await this.db.barbershop.update({
+      where: { id: this.tenant.barbershopId },
+      data: {
+        name: dto.name.trim(),
+        tradeName: dto.tradeName?.trim() || null,
+        document: dto.document?.replace(/\D/g, '') || null,
+        ownerName: dto.ownerName.trim(),
+        phone: dto.phone?.replace(/\D/g, '') || null,
+        whatsapp: dto.whatsapp?.replace(/\D/g, '') || null,
+        email: dto.email?.trim().toLowerCase() || null,
+        address: dto.address?.trim() || null,
+        city: dto.city?.trim() || null,
+        state: dto.state?.trim().toUpperCase() || null,
+        zipCode: dto.zipCode?.replace(/\D/g, '') || null,
+        primaryColor,
+        primaryTextColor,
+      },
+    });
+    await this.completeOnboardingStep('BUSINESS');
+    return updated;
+  }
+
+  async uploadBarbershopLogo(logo: Express.Multer.File) {
+    const barbershop = await this.db.barbershop.findUniqueOrThrow({
+      where: { id: this.tenant.barbershopId },
+      select: { id: true, logoUrl: true },
+    });
+    const extension =
+      logo.mimetype === 'image/png' ? '.png' : logo.mimetype === 'image/webp' ? '.webp' : '.jpg';
+    const root = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
+    const directory = join(root, 'barbershops');
+    await mkdir(directory, { recursive: true });
+    const filename = `${barbershop.id}-${randomUUID()}${extension}`;
+    await writeFile(join(directory, filename), logo.buffer);
+    const logoUrl = `/uploads/barbershops/${filename}`;
+    const updated = await this.db.barbershop.update({
+      where: { id: barbershop.id },
+      data: { logoUrl },
+      select: { logoUrl: true },
+    });
+    if (barbershop.logoUrl?.startsWith('/uploads/barbershops/')) {
+      await unlink(join(directory, basename(barbershop.logoUrl))).catch(() => undefined);
+    }
+    return updated;
+  }
+
+  async updateRegionalSettings(dto: UpdateRegionalSettingsDto) {
+    if (!['BRL', 'USD', 'EUR'].includes(dto.currency)) {
+      throw new BadRequestException('Moeda não suportada');
+    }
+    try {
+      new Intl.DateTimeFormat('pt-BR', { timeZone: dto.timezone }).format();
+    } catch {
+      throw new BadRequestException('Fuso horário inválido');
+    }
+    return this.db.setting.upsert({
+      where: { barbershopId: this.tenant.barbershopId },
+      update: { currency: dto.currency, timezone: dto.timezone },
+      create: {
+        barbershopId: this.tenant.barbershopId,
+        currency: dto.currency,
+        timezone: dto.timezone,
+      },
+    });
+  }
+
+  async updateOpeningHours(dto: UpdateOpeningHoursDto) {
+    if (dto.hours.length !== 7) throw new BadRequestException('Informe os sete dias da semana');
+    for (const hour of dto.hours) {
+      if (hour.enabled && hour.start >= hour.end) {
+        throw new BadRequestException(`Horário inválido para ${hour.day}`);
+      }
+    }
+    const openingHours = Object.fromEntries(
+      dto.hours.map((hour) => [hour.day, hour.enabled ? [hour.start, hour.end] : null]),
+    );
+    const setting = await this.db.setting.upsert({
+      where: { barbershopId: this.tenant.barbershopId },
+      update: { openingHours },
+      create: { barbershopId: this.tenant.barbershopId, openingHours },
+    });
+    await this.completeOnboardingStep('HOURS');
+    return setting;
+  }
+
+  async updateOperationalSettings(dto: UpdateOperationalSettingsDto) {
+    const setting = await this.db.setting.upsert({
+      where: { barbershopId: this.tenant.barbershopId },
+      update: dto,
+      create: { barbershopId: this.tenant.barbershopId, ...dto },
+    });
+    if (dto.publicBooking) await this.completeOnboardingStep('BOOKING');
+    return setting;
+  }
+
+  completeOnboardingStep(step: string) {
+    const barbershopId = this.tenant.barbershopId;
+    return this.db.$transaction(async (tx) => {
+      const current = await tx.onboardingProgress.upsert({
+        where: { barbershopId },
+        update: {},
+        create: { barbershopId },
+      });
+      const completedSteps = [...new Set([...current.completedSteps, step])] as any[];
+      return tx.onboardingProgress.update({
+        where: { barbershopId },
+        data: {
+          completedSteps,
+          completedAt: completedSteps.length === 5 ? current.completedAt || new Date() : null,
+          dismissedAt: null,
+        },
+      });
+    });
+  }
+
+  setOnboardingDismissed(dismissed: boolean) {
+    const barbershopId = this.tenant.barbershopId;
+    return this.db.onboardingProgress.upsert({
+      where: { barbershopId },
+      update: { dismissedAt: dismissed ? new Date() : null },
+      create: { barbershopId, dismissedAt: dismissed ? new Date() : null },
+    });
+  }
+
+  private accessibleTextColor(hex: string) {
+    const values = [1, 3, 5].map((index) => Number.parseInt(hex.slice(index, index + 2), 16) / 255);
+    const luminance = values
+      .map((value) => (value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4))
+      .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index], 0);
+    const whiteContrast = 1.05 / (luminance + 0.05);
+    const blackContrast = (luminance + 0.05) / 0.05;
+    return whiteContrast >= blackContrast ? '#FFFFFF' : '#000000';
   }
 
   async reports(query: ReportsQuery) {
