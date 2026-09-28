@@ -13,6 +13,8 @@ import { DataService } from './data.service';
 import { AvailabilityService } from './availability.service';
 import { PermissionsGuard, RolesGuard } from './rbac';
 import { SuperAdminController, SuperAdminService } from './super-admin';
+import { PublicBookingController } from './public-booking.controller';
+import { PublicBookingService } from './public-booking.service';
 
 @Module({
   imports: [
@@ -25,7 +27,13 @@ import { SuperAdminController, SuperAdminService } from './super-admin';
       signOptions: { expiresIn: '15m' },
     }),
   ],
-  controllers: [AuthController, DataController, HealthController, SuperAdminController],
+  controllers: [
+    AuthController,
+    DataController,
+    HealthController,
+    SuperAdminController,
+    PublicBookingController,
+  ],
   providers: [
     PrismaService,
     AuthService,
@@ -36,6 +44,7 @@ import { SuperAdminController, SuperAdminService } from './super-admin';
     RolesGuard,
     PermissionsGuard,
     SuperAdminService,
+    PublicBookingService,
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

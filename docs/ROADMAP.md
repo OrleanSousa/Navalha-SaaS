@@ -295,16 +295,16 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Etapa 16 — Agendamento público
 
-- [ ] 16.1 Criar página pública por slug
-- [ ] 16.2 Exibir identidade e serviços ativos
-- [ ] 16.3 Filtrar profissionais habilitados
-- [ ] 16.4 Consultar dias e horários disponíveis
-- [ ] 16.5 Coletar nome e WhatsApp
-- [ ] 16.6 Localizar ou criar cliente com segurança
-- [ ] 16.7 Reservar horário de forma transacional
-- [ ] 16.8 Exibir confirmação
-- [ ] 16.9 Aplicar rate limiting e proteção antiabuso
-- [ ] 16.10 Testar disputa simultânea pelo último horário
+- [x] 16.1 Criar página pública por slug
+- [x] 16.2 Exibir identidade e serviços ativos
+- [x] 16.3 Filtrar profissionais habilitados
+- [x] 16.4 Consultar dias e horários disponíveis
+- [x] 16.5 Coletar nome e WhatsApp
+- [x] 16.6 Localizar ou criar cliente com segurança
+- [x] 16.7 Reservar horário de forma transacional
+- [x] 16.8 Exibir confirmação
+- [x] 16.9 Aplicar rate limiting e proteção antiabuso
+- [x] 16.10 Testar disputa simultânea pelo último horário
 
 ## Etapa 17 — Notificações e integração futura
 

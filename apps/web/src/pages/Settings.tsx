@@ -403,6 +403,16 @@ export function Settings() {
               onChange={(value) => setOperational({ ...operational, publicBooking: value })}
             />
           </div>
+          {operational.publicBooking && query.data.barbershop.slug && (
+            <a
+              className="public-booking-link"
+              href={`/agendar/${query.data.barbershop.slug}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Abrir página pública de agendamento
+            </a>
+          )}
           <SaveButton pending={saveOperational.isPending} />
         </form>
       </div>

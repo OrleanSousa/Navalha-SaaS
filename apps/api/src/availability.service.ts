@@ -15,7 +15,20 @@ export class AvailabilityService {
     query: EmployeeAvailabilityQuery,
     excludeAppointmentId?: string,
   ) {
-    const barbershopId = this.tenant.barbershopId;
+    return this.employeeSlotsForTenant(
+      this.tenant.barbershopId,
+      employeeId,
+      query,
+      excludeAppointmentId,
+    );
+  }
+
+  async employeeSlotsForTenant(
+    barbershopId: string,
+    employeeId: string,
+    query: EmployeeAvailabilityQuery,
+    excludeAppointmentId?: string,
+  ) {
     const [employee, settings] = await Promise.all([
       this.db.employee.findFirst({
         where: { id: employeeId, barbershopId, active: true, deletedAt: null },

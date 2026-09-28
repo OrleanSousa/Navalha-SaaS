@@ -16,6 +16,8 @@ import { DataService } from '../src/data.service';
 import { PrismaService } from '../src/prisma.service';
 import { PermissionsGuard, RolesGuard } from '../src/rbac';
 import { SuperAdminController, SuperAdminService } from '../src/super-admin';
+import { PublicBookingController } from '../src/public-booking.controller';
+import { PublicBookingService } from '../src/public-booking.service';
 
 describe('Isolamento multi-tenant (e2e)', () => {
   let app: INestApplication;
@@ -46,7 +48,7 @@ describe('Isolamento multi-tenant (e2e)', () => {
           signOptions: { expiresIn: '15m' },
         }),
       ],
-      controllers: [AuthController, DataController, SuperAdminController],
+      controllers: [AuthController, DataController, SuperAdminController, PublicBookingController],
       providers: [
         PrismaService,
         AuthService,
@@ -57,6 +59,7 @@ describe('Isolamento multi-tenant (e2e)', () => {
         RolesGuard,
         PermissionsGuard,
         SuperAdminService,
+        PublicBookingService,
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -249,6 +252,98 @@ describe('Isolamento multi-tenant (e2e)', () => {
       .get('/api/settings')
       .set('Authorization', `Bearer ${receptionistToken}`)
       .expect(403);
+  });
+
+  it('permite somente uma reserva simultânea para o último horário público', async () => {
+    const dateValue = new Date();
+    dateValue.setUTCDate(dateValue.getUTCDate() + 2);
+    const date = dateValue.toISOString().slice(0, 10);
+    const weekday = dateValue.getUTCDay();
+    const phone = `119${String(Date.now()).slice(-8)}`;
+    let serviceId = '';
+    let scheduleId = '';
+
+    try {
+      await db.setting.upsert({
+        where: { barbershopId: shopAId },
+        create: { barbershopId: shopAId, publicBooking: true },
+        update: { publicBooking: true },
+      });
+      const publicService = await db.service.create({
+        data: {
+          barbershopId: shopAId,
+          name: `Serviço público ${suffix}`,
+          price: 50,
+          durationMinutes: 60,
+        },
+      });
+      serviceId = publicService.id;
+      await db.employeeService.create({
+        data: { barbershopId: shopAId, employeeId: employeeAId, serviceId },
+      });
+      const schedule = await db.workSchedule.create({
+        data: {
+          barbershopId: shopAId,
+          employeeId: employeeAId,
+          weekday,
+          startTime: '10:00',
+          endTime: '11:00',
+        },
+      });
+      scheduleId = schedule.id;
+
+      const page = await request(app.getHttpServer())
+        .get(`/api/public/booking/tenant-a-${suffix}`)
+        .expect(200);
+      expect(page.body.services.some((item: { id: string }) => item.id === serviceId)).toBe(true);
+
+      const professionals = await request(app.getHttpServer())
+        .get(`/api/public/booking/tenant-a-${suffix}/services/${serviceId}/professionals`)
+        .expect(200);
+      expect(professionals.body.map((item: { id: string }) => item.id)).toContain(employeeAId);
+
+      const availability = await request(app.getHttpServer())
+        .get(`/api/public/booking/tenant-a-${suffix}/availability`)
+        .query({ serviceId, employeeId: employeeAId, date })
+        .expect(200);
+      expect(availability.body.slots).toHaveLength(1);
+      const payload = {
+        serviceId,
+        employeeId: employeeAId,
+        startAt: availability.body.slots[0].startAt,
+        name: 'Cliente Público',
+        whatsapp: phone,
+      };
+
+      const responses = await Promise.all([
+        request(app.getHttpServer())
+          .post(`/api/public/booking/tenant-a-${suffix}/appointments`)
+          .send(payload),
+        request(app.getHttpServer())
+          .post(`/api/public/booking/tenant-a-${suffix}/appointments`)
+          .send(payload),
+      ]);
+      expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+      expect(
+        await db.appointment.count({
+          where: {
+            barbershopId: shopAId,
+            employeeId: employeeAId,
+            startAt: new Date(payload.startAt),
+          },
+        }),
+      ).toBe(1);
+    } finally {
+      await db.appointment.deleteMany({
+        where: { barbershopId: shopAId, notes: 'Agendamento realizado pelo portal público' },
+      });
+      await db.customer.deleteMany({ where: { barbershopId: shopAId, phone } });
+      if (serviceId) {
+        await db.employeeService.deleteMany({ where: { serviceId } });
+        await db.service.deleteMany({ where: { id: serviceId } });
+      }
+      if (scheduleId) await db.workSchedule.deleteMany({ where: { id: scheduleId } });
+    }
   });
 
   it('retorna somente registros pertencentes ao tenant do token', async () => {

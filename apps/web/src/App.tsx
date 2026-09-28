@@ -17,6 +17,7 @@ import { Commissions } from './pages/Commissions';
 import { Accounts } from './pages/Accounts';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
+import { PublicBooking } from './pages/PublicBooking';
 import { Placeholder } from './pages/Placeholder';
 import { useAuth } from './lib/auth';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/login" element={user ? <Navigate to={home} /> : <Login />} />
       <Route path="/recuperar-senha" element={<ForgotPassword />} />
       <Route path="/redefinir-senha" element={<ResetPassword />} />
+      <Route path="/agendar/:slug" element={<PublicBooking />} />
       <Route
         path="/super-admin"
         element={

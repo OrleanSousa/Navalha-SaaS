@@ -227,6 +227,13 @@
 .settings-toggles input {
   accent-color: #a87522;
 }
+.public-booking-link {
+  display: inline-flex;
+  margin-top: 14px;
+  color: #8b6624;
+  font-size: 10px;
+  font-weight: 700;
+}
 @media (max-width: 900px) {
   .settings-grid {
     grid-template-columns: repeat(2, 1fr);
