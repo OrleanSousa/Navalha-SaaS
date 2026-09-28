@@ -9,6 +9,12 @@ import { Catalog } from './pages/Catalog';
 import { Finance } from './pages/Finance';
 import { Employees } from './pages/Employees';
 import { EmployeeDetails } from './pages/EmployeeDetails';
+import { ServiceDetails } from './pages/ServiceDetails';
+import { ProductCatalog } from './pages/ProductCatalog';
+import { ProductDetails } from './pages/ProductDetails';
+import { Attendances } from './pages/Attendances';
+import { Commissions } from './pages/Commissions';
+import { Accounts } from './pages/Accounts';
 import { Placeholder } from './pages/Placeholder';
 import { useAuth } from './lib/auth';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -39,8 +45,14 @@ export default function App() {
         <Route path="clientes" element={<Customers />} />
         <Route path="clientes/:id" element={<CustomerDetails />} />
         <Route path="servicos" element={<Catalog type="services" />} />
-        <Route path="produtos" element={<Catalog type="products" />} />
+        <Route path="servicos/:id" element={<ServiceDetails />} />
+        <Route path="produtos" element={<ProductCatalog />} />
+        <Route path="produtos/:id" element={<ProductDetails />} />
+        <Route path="atendimentos" element={<Attendances />} />
+        <Route path="vendas" element={<Attendances historyOnly />} />
+        <Route path="comissoes" element={<Commissions />} />
         <Route path="financeiro" element={<Finance />} />
+        <Route path="contas" element={<Accounts />} />
         <Route path="colaboradores" element={<Employees />} />
         <Route path="colaboradores/:id" element={<EmployeeDetails />} />
         <Route path=":page" element={<Placeholder />} />

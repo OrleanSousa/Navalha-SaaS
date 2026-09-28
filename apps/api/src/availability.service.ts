@@ -10,7 +10,11 @@ export class AvailabilityService {
     private readonly tenant: TenantContext,
   ) {}
 
-  async employeeSlots(employeeId: string, query: EmployeeAvailabilityQuery) {
+  async employeeSlots(
+    employeeId: string,
+    query: EmployeeAvailabilityQuery,
+    excludeAppointmentId?: string,
+  ) {
     const barbershopId = this.tenant.barbershopId;
     const [employee, settings] = await Promise.all([
       this.db.employee.findFirst({
@@ -57,6 +61,7 @@ export class AvailabilityService {
         where: {
           barbershopId,
           employeeId,
+          ...(excludeAppointmentId && { id: { not: excludeAppointmentId } }),
           status: { in: ['SCHEDULED', 'CONFIRMED', 'IN_SERVICE'] },
           startAt: { lt: dayEnd },
           endAt: { gt: dayStart },
@@ -123,6 +128,40 @@ export class AvailabilityService {
       stepMinutes: query.stepMinutes,
       slots,
     };
+  }
+
+  async assertEmployeeAvailable(
+    employeeId: string,
+    startAt: Date,
+    durationMinutes: number,
+    excludeAppointmentId?: string,
+  ) {
+    if (
+      Number.isNaN(startAt.getTime()) ||
+      startAt.getSeconds() !== 0 ||
+      startAt.getMilliseconds() !== 0
+    ) {
+      throw new BadRequestException('O horário deve usar minutos inteiros');
+    }
+    const settings = await this.db.setting.findUnique({
+      where: { barbershopId: this.tenant.barbershopId },
+      select: { timezone: true },
+    });
+    const timezone = settings?.timezone || 'America/Sao_Paulo';
+    const date = new Intl.DateTimeFormat('en-CA', {
+      timeZone: timezone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(startAt);
+    const result = await this.employeeSlots(
+      employeeId,
+      { date, durationMinutes, stepMinutes: 1 },
+      excludeAppointmentId,
+    );
+    if (!result.slots.some((slot) => new Date(slot.startAt).getTime() === startAt.getTime())) {
+      throw new BadRequestException('Horário indisponível para o profissional');
+    }
   }
 
   private timeToMinutes(value: string) {

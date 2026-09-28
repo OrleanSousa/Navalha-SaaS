@@ -1,0 +1,197 @@
+.commission-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 13px;
+  margin-bottom: 15px;
+}
+.commission-metrics > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 17px;
+}
+.commission-metrics svg {
+  width: 24px;
+  color: #a87522;
+}
+.commission-metrics small,
+.commission-metrics b {
+  display: block;
+}
+.commission-metrics small {
+  font-size: 8px;
+  color: #888;
+}
+.commission-metrics b {
+  font: 700 17px Manrope;
+  margin-top: 3px;
+}
+.commission-filters {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  padding: 15px;
+  margin-bottom: 15px;
+}
+.commission-filters label,
+.commission-modal label {
+  font-size: 8px;
+  font-weight: 700;
+  color: #777;
+}
+.commission-filters input,
+.commission-filters select,
+.commission-modal input,
+.commission-modal select,
+.commission-modal textarea {
+  display: block;
+  width: 100%;
+  height: 39px;
+  margin-top: 5px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  padding: 0 9px;
+}
+.commission-table td > b,
+.commission-table td > small {
+  display: block;
+}
+.commission-table td > small {
+  font-size: 8px;
+  color: #888;
+  margin-top: 3px;
+}
+.commission-table input[type='checkbox'] {
+  accent-color: #a87522;
+}
+.commission-person {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.commission-person i {
+  width: 31px;
+  height: 31px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+}
+.commission-person b,
+.commission-person small {
+  display: block;
+}
+.commission-person small {
+  font-size: 8px;
+  color: #888;
+  margin-top: 2px;
+}
+.commission-actions {
+  display: flex;
+}
+.commission-actions svg {
+  width: 15px;
+}
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: #1118;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+}
+.commission-modal {
+  width: min(520px, 100%);
+  max-height: 90vh;
+  overflow: auto;
+  padding: 22px;
+}
+.commission-modal h3 {
+  font: 700 18px Manrope;
+  margin: 0;
+}
+.commission-modal > p {
+  font-size: 10px;
+  color: #777;
+}
+.commission-modal label {
+  display: block;
+  margin-top: 13px;
+}
+.commission-modal textarea {
+  height: 75px;
+  padding: 9px;
+  resize: vertical;
+}
+.calculation-list {
+  margin: 16px 0;
+}
+.calculation-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 11px 0;
+  border-top: 1px solid var(--line);
+}
+.calculation-list b,
+.calculation-list small {
+  display: block;
+}
+.calculation-list b {
+  font-size: 10px;
+}
+.calculation-list small {
+  font-size: 8px;
+  color: #777;
+  margin-top: 3px;
+}
+.calculation-list strong {
+  font-size: 11px;
+}
+.modal-total {
+  display: flex;
+  justify-content: space-between;
+  border-top: 2px solid var(--line);
+  padding: 12px 0;
+  font: 700 15px Manrope;
+}
+.commission-note {
+  background: #faf6eb;
+  padding: 10px;
+  border-radius: 5px;
+}
+.commission-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 17px;
+}
+.payment-warning {
+  display: block;
+  color: #8c692d;
+  margin-top: 10px;
+}
+@media (max-width: 800px) {
+  .commission-metrics {
+    grid-template-columns: 1fr;
+  }
+  .commission-filters {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+@media (max-width: 520px) {
+  .commission-filters {
+    grid-template-columns: 1fr;
+  }
+  .commission-modal-actions {
+    flex-direction: column-reverse;
+  }
+  .commission-modal-actions button {
+    justify-content: center;
+  }
+}

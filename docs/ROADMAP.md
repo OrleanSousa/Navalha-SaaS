@@ -150,116 +150,116 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Etapa 7 — Serviços e comissões específicas
 
-- [ ] 7.1 Criar serviço
-- [ ] 7.2 Editar serviço
-- [ ] 7.3 Ativar/inativar serviço
-- [ ] 7.4 Criar categorias de serviços
-- [ ] 7.5 Validar preço monetário e duração
-- [ ] 7.6 Definir comissão percentual ou fixa
-- [ ] 7.7 Vincular profissionais habilitados ao serviço
-- [ ] 7.8 Configurar comissão específica por profissional
-- [ ] 7.9 Criar formulários e tela de detalhes
-- [ ] 7.10 Testar prioridade das configurações
+- [x] 7.1 Criar serviço
+- [x] 7.2 Editar serviço
+- [x] 7.3 Ativar/inativar serviço
+- [x] 7.4 Criar categorias de serviços
+- [x] 7.5 Validar preço monetário e duração
+- [x] 7.6 Definir comissão percentual ou fixa
+- [x] 7.7 Vincular profissionais habilitados ao serviço
+- [x] 7.8 Configurar comissão específica por profissional
+- [x] 7.9 Criar formulários e tela de detalhes
+- [x] 7.10 Testar prioridade das configurações
 
 ## Etapa 8 — Produtos e estoque
 
-- [ ] 8.1 Criar produto
-- [ ] 8.2 Editar produto
-- [ ] 8.3 Ativar/inativar produto
-- [ ] 8.4 Criar categorias de produtos
-- [ ] 8.5 Validar SKU e código de barras por tenant
-- [ ] 8.6 Registrar entrada de estoque
-- [ ] 8.7 Registrar ajuste
-- [ ] 8.8 Registrar perda
-- [ ] 8.9 Registrar devolução
-- [ ] 8.10 Criar extrato de movimentações
-- [ ] 8.11 Criar alerta de estoque mínimo
-- [ ] 8.12 Impedir estoque negativo conforme configuração
-- [ ] 8.13 Testar concorrência na baixa de estoque
+- [x] 8.1 Criar produto
+- [x] 8.2 Editar produto
+- [x] 8.3 Ativar/inativar produto
+- [x] 8.4 Criar categorias de produtos
+- [x] 8.5 Validar SKU e código de barras por tenant
+- [x] 8.6 Registrar entrada de estoque
+- [x] 8.7 Registrar ajuste
+- [x] 8.8 Registrar perda
+- [x] 8.9 Registrar devolução
+- [x] 8.10 Criar extrato de movimentações
+- [x] 8.11 Criar alerta de estoque mínimo
+- [x] 8.12 Impedir estoque negativo conforme configuração
+- [x] 8.13 Testar concorrência na baixa de estoque
 
 ## Etapa 9 — Agenda e agendamentos
 
-- [ ] 9.1 Criar DTO de novo agendamento
-- [ ] 9.2 Validar cliente, profissional e serviços no mesmo tenant
-- [ ] 9.3 Calcular duração e preço no backend
-- [ ] 9.4 Criar endpoint de horários disponíveis
-- [ ] 9.5 Impedir horário fora da jornada
-- [ ] 9.6 Impedir horário em intervalo ou bloqueio
-- [ ] 9.7 Impedir sobreposição transacional
-- [ ] 9.8 Criar agendamento com múltiplos serviços
-- [ ] 9.9 Editar e reagendar
-- [ ] 9.10 Confirmar agendamento
-- [ ] 9.11 Cancelar com motivo
-- [ ] 9.12 Marcar não comparecimento
-- [ ] 9.13 Implementar visualização diária real
-- [ ] 9.14 Implementar visualização semanal
-- [ ] 9.15 Implementar visualização mensal
-- [ ] 9.16 Filtrar por profissional e status
-- [ ] 9.17 Usar cor configurada do profissional
-- [ ] 9.18 Testar duas requisições simultâneas para o mesmo horário
+- [x] 9.1 Criar DTO de novo agendamento
+- [x] 9.2 Validar cliente, profissional e serviços no mesmo tenant
+- [x] 9.3 Calcular duração e preço no backend
+- [x] 9.4 Criar endpoint de horários disponíveis
+- [x] 9.5 Impedir horário fora da jornada
+- [x] 9.6 Impedir horário em intervalo ou bloqueio
+- [x] 9.7 Impedir sobreposição transacional
+- [x] 9.8 Criar agendamento com múltiplos serviços
+- [x] 9.9 Editar e reagendar
+- [x] 9.10 Confirmar agendamento
+- [x] 9.11 Cancelar com motivo
+- [x] 9.12 Marcar não comparecimento
+- [x] 9.13 Implementar visualização diária real
+- [x] 9.14 Implementar visualização semanal
+- [x] 9.15 Implementar visualização mensal
+- [x] 9.16 Filtrar por profissional e status
+- [x] 9.17 Usar cor configurada do profissional
+- [x] 9.18 Testar duas requisições simultâneas para o mesmo horário
 
 ## Etapa 10 — Atendimento, venda e pagamento
 
-- [ ] 10.1 Iniciar atendimento a partir do agendamento
-- [ ] 10.2 Criar atendimento avulso
-- [ ] 10.3 Adicionar/remover múltiplos serviços
-- [ ] 10.4 Adicionar/remover produtos
-- [ ] 10.5 Recalcular subtotal no backend
-- [ ] 10.6 Aplicar desconto com permissão e motivo
-- [ ] 10.7 Registrar uma forma de pagamento
-- [ ] 10.8 Registrar pagamento dividido
-- [ ] 10.9 Validar soma dos pagamentos contra total
-- [ ] 10.10 Finalizar tudo em uma transação Prisma
-- [ ] 10.11 Criar itens da venda
-- [ ] 10.12 Baixar estoque atomicamente
-- [ ] 10.13 Criar entrada financeira
-- [ ] 10.14 Criar comissão sem duplicidade
-- [ ] 10.15 Marcar agendamento como finalizado
-- [ ] 10.16 Criar comprovante/resumo da venda
-- [ ] 10.17 Testar rollback quando qualquer etapa falhar
+- [x] 10.1 Iniciar atendimento a partir do agendamento
+- [x] 10.2 Criar atendimento avulso
+- [x] 10.3 Adicionar/remover múltiplos serviços
+- [x] 10.4 Adicionar/remover produtos
+- [x] 10.5 Recalcular subtotal no backend
+- [x] 10.6 Aplicar desconto com permissão e motivo
+- [x] 10.7 Registrar uma forma de pagamento
+- [x] 10.8 Registrar pagamento dividido
+- [x] 10.9 Validar soma dos pagamentos contra total
+- [x] 10.10 Finalizar tudo em uma transação Prisma
+- [x] 10.11 Criar itens da venda
+- [x] 10.12 Baixar estoque atomicamente
+- [x] 10.13 Criar entrada financeira
+- [x] 10.14 Criar comissão sem duplicidade
+- [x] 10.15 Marcar agendamento como finalizado
+- [x] 10.16 Criar comprovante/resumo da venda
+- [x] 10.17 Testar rollback quando qualquer etapa falhar
 
 ## Etapa 11 — Comissões
 
-- [ ] 11.1 Implementar prioridade de cálculo definida no briefing
-- [ ] 11.2 Suportar percentual e valor fixo
-- [ ] 11.3 Calcular comissão de serviços
-- [ ] 11.4 Calcular comissão de produtos
-- [ ] 11.5 Listar por profissional, período e status
-- [ ] 11.6 Exibir resumo vendido/comissão/atendimentos
-- [ ] 11.7 Marcar uma comissão como paga
-- [ ] 11.8 Pagar comissões em lote
-- [ ] 11.9 Registrar responsável, data e observação
-- [ ] 11.10 Gerar saída financeira do pagamento
-- [ ] 11.11 Auditar ajustes e pagamentos
+- [x] 11.1 Implementar prioridade de cálculo definida no briefing
+- [x] 11.2 Suportar percentual e valor fixo
+- [x] 11.3 Calcular comissão de serviços
+- [x] 11.4 Calcular comissão de produtos
+- [x] 11.5 Listar por profissional, período e status
+- [x] 11.6 Exibir resumo vendido/comissão/atendimentos
+- [x] 11.7 Marcar uma comissão como paga
+- [x] 11.8 Pagar comissões em lote
+- [x] 11.9 Registrar responsável, data e observação
+- [x] 11.10 Gerar saída financeira do pagamento
+- [x] 11.11 Auditar ajustes e pagamentos
 
 ## Etapa 12 — Caixa e lançamentos financeiros
 
-- [ ] 12.1 Abrir caixa com saldo inicial
-- [ ] 12.2 Impedir dois caixas abertos conforme regra configurada
-- [ ] 12.3 Listar movimentações do caixa
-- [ ] 12.4 Criar entrada manual
-- [ ] 12.5 Criar saída manual
-- [ ] 12.6 Editar/cancelar lançamento com auditoria
-- [ ] 12.7 Consolidar valores por forma de pagamento
-- [ ] 12.8 Calcular saldo esperado
-- [ ] 12.9 Fechar caixa com saldo contado
-- [ ] 12.10 Calcular e registrar diferença
-- [ ] 12.11 Impedir fechamento duplicado
-- [ ] 12.12 Criar histórico de caixas
-- [ ] 12.13 Testar abertura, movimentação e fechamento
+- [x] 12.1 Abrir caixa com saldo inicial
+- [x] 12.2 Impedir dois caixas abertos conforme regra configurada
+- [x] 12.3 Listar movimentações do caixa
+- [x] 12.4 Criar entrada manual
+- [x] 12.5 Criar saída manual
+- [x] 12.6 Editar/cancelar lançamento com auditoria
+- [x] 12.7 Consolidar valores por forma de pagamento
+- [x] 12.8 Calcular saldo esperado
+- [x] 12.9 Fechar caixa com saldo contado
+- [x] 12.10 Calcular e registrar diferença
+- [x] 12.11 Impedir fechamento duplicado
+- [x] 12.12 Criar histórico de caixas
+- [x] 12.13 Testar abertura, movimentação e fechamento
 
 ## Etapa 13 — Contas a pagar e receber
 
-- [ ] 13.1 Adicionar entidades/migrations específicas
-- [ ] 13.2 CRUD de fornecedores e categorias
-- [ ] 13.3 Criar conta a pagar
-- [ ] 13.4 Marcar conta como paga e lançar saída
-- [ ] 13.5 Calcular status vencida
-- [ ] 13.6 Criar recorrência de despesas
-- [ ] 13.7 Criar conta a receber vinculada ao cliente
-- [ ] 13.8 Baixar recebimento e lançar entrada
-- [ ] 13.9 Calcular status vencido
-- [ ] 13.10 Criar filtros, totais e alertas
+- [x] 13.1 Adicionar entidades/migrations específicas
+- [x] 13.2 CRUD de fornecedores e categorias
+- [x] 13.3 Criar conta a pagar
+- [x] 13.4 Marcar conta como paga e lançar saída
+- [x] 13.5 Calcular status vencida
+- [x] 13.6 Criar recorrência de despesas
+- [x] 13.7 Criar conta a receber vinculada ao cliente
+- [x] 13.8 Baixar recebimento e lançar entrada
+- [x] 13.9 Calcular status vencido
+- [x] 13.10 Criar filtros, totais e alertas
 
 ## Etapa 14 — Dashboard e relatórios reais
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Iniciar a **Etapa 7** criando serviços (item 7.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Iniciar a **Etapa 14** removendo os valores estáticos restantes do dashboard e dos relatórios (item 14.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

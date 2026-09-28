@@ -175,4 +175,23 @@ describe('AvailabilityService', () => {
       }),
     );
   });
+
+  it('ignora somente o próprio agendamento durante um reagendamento', async () => {
+    await service.employeeSlots(
+      'employee-1',
+      { date: '2026-09-14', durationMinutes: 30, stepMinutes: 15 },
+      'appointment-1',
+    );
+
+    expect(db.appointment.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({ id: { not: 'appointment-1' } }),
+      }),
+    );
+    expect(db.employeeUnavailability.findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.not.objectContaining({ id: expect.anything() }),
+      }),
+    );
+  });
 });

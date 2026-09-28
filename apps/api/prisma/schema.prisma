@@ -57,9 +57,40 @@ enum FinancialStatus {
   CANCELLED
 }
 
+enum FinancialOrigin {
+  MANUAL
+  SALE
+  COMMISSION
+  ACCOUNT_PAYABLE
+  ACCOUNT_RECEIVABLE
+}
+
+enum AccountStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+enum FinancialCategoryType {
+  EXPENSE
+  INCOME
+}
+
+enum RecurrenceFrequency {
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
 enum CommissionStatus {
   PENDING
   PAID
+}
+
+enum SaleStatus {
+  DRAFT
+  COMPLETED
+  CANCELLED
 }
 
 enum EmployeeUnavailabilityType {
@@ -305,12 +336,19 @@ model Barbershop {
   employeeUnavailabilities EmployeeUnavailability[]
   customers                Customer[]
   services                 Service[]
+  serviceCategories        ServiceCategory[]
+  productCategories        ProductCategory[]
   products                 Product[]
   appointments             Appointment[]
   sales                    Sale[]
   financialTransactions    FinancialTransaction[]
   cashRegisters            CashRegister[]
   commissions              Commission[]
+  suppliers                Supplier[]
+  financialCategories      FinancialCategory[]
+  expenseRecurrences       ExpenseRecurrence[]
+  accountsPayable          AccountPayable[]
+  accountsReceivable       AccountReceivable[]
   notifications            Notification[]
   auditLogs                AuditLog[]
   subscriptionInvoices     SubscriptionInvoice[]
@@ -349,23 +387,28 @@ model PasswordResetToken {
 }
 
 model User {
-  id                  String               @id @default(uuid())
-  barbershopId        String?
-  email               String               @unique
-  passwordHash        String
-  name                String
-  role                Role                 @default(RECEPTIONIST)
-  active              Boolean              @default(true)
-  employee            Employee?
-  barbershop          Barbershop?          @relation(fields: [barbershopId], references: [id])
-  inventoryMovements  InventoryMovement[]
-  cashRegisters       CashRegister[]
-  auditLogs           AuditLog[]
-  sessions            Session[]
-  passwordResetTokens PasswordResetToken[]
-  userPermissions     UserPermission[]
-  createdAt           DateTime             @default(now())
-  updatedAt           DateTime             @updatedAt
+  id                    String                 @id @default(uuid())
+  barbershopId          String?
+  email                 String                 @unique
+  passwordHash          String
+  name                  String
+  role                  Role                   @default(RECEPTIONIST)
+  active                Boolean                @default(true)
+  employee              Employee?
+  barbershop            Barbershop?            @relation(fields: [barbershopId], references: [id])
+  inventoryMovements    InventoryMovement[]
+  openedCashRegisters   CashRegister[]         @relation("CashRegisterOpenedBy")
+  closedCashRegisters   CashRegister[]         @relation("CashRegisterClosedBy")
+  cancelledTransactions FinancialTransaction[] @relation("FinancialTransactionCancelledBy")
+  auditLogs             AuditLog[]
+  sessions              Session[]
+  passwordResetTokens   PasswordResetToken[]
+  userPermissions       UserPermission[]
+  paidCommissions       Commission[]           @relation("CommissionPaidBy")
+  paidAccounts          AccountPayable[]       @relation("AccountPayablePaidBy")
+  receivedAccounts      AccountReceivable[]    @relation("AccountReceivableReceivedBy")
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 
   @@index([barbershopId])
 }
@@ -471,21 +514,22 @@ model EmployeeUnavailability {
 }
 
 model Customer {
-  id           String        @id @default(uuid())
-  barbershopId String
-  name         String
-  phone        String
-  whatsapp     String?
-  email        String?
-  cpf          String?
-  birthDate    DateTime?
-  notes        String?
-  appointments Appointment[]
-  sales        Sale[]
-  barbershop   Barbershop    @relation(fields: [barbershopId], references: [id])
-  createdAt    DateTime      @default(now())
-  updatedAt    DateTime      @updatedAt
-  deletedAt    DateTime?
+  id                 String              @id @default(uuid())
+  barbershopId       String
+  name               String
+  phone              String
+  whatsapp           String?
+  email              String?
+  cpf                String?
+  birthDate          DateTime?
+  notes              String?
+  appointments       Appointment[]
+  sales              Sale[]
+  accountsReceivable AccountReceivable[]
+  barbershop         Barbershop          @relation(fields: [barbershopId], references: [id])
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+  deletedAt          DateTime?
 
   @@index([barbershopId, name])
   @@index([barbershopId, phone])
@@ -496,12 +540,14 @@ model Service {
   barbershopId        String
   name                String
   description         String?
-  category            String?
+  categoryId          String?
   price               Decimal              @db.Decimal(10, 2)
   durationMinutes     Int
   commissionPercent   Decimal?             @db.Decimal(5, 2)
+  commissionFixed     Decimal?             @db.Decimal(10, 2)
   active              Boolean              @default(true)
   barbershop          Barbershop           @relation(fields: [barbershopId], references: [id])
+  category            ServiceCategory?     @relation(fields: [categoryId], references: [id])
   employeeServices    EmployeeService[]
   appointmentServices AppointmentService[]
   saleItems           SaleItem[]
@@ -510,6 +556,21 @@ model Service {
   deletedAt           DateTime?
 
   @@index([barbershopId, name])
+  @@index([categoryId])
+}
+
+model ServiceCategory {
+  id           String     @id @default(uuid())
+  barbershopId String
+  name         String
+  active       Boolean    @default(true)
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id])
+  services     Service[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([barbershopId, name])
+  @@index([barbershopId, active])
 }
 
 model EmployeeService {
@@ -531,7 +592,7 @@ model Product {
   barbershopId      String
   name              String
   description       String?
-  category          String?
+  categoryId        String?
   sku               String?
   barcode           String?
   costPrice         Decimal             @db.Decimal(10, 2)
@@ -541,6 +602,7 @@ model Product {
   commissionPercent Decimal?            @db.Decimal(5, 2)
   active            Boolean             @default(true)
   barbershop        Barbershop          @relation(fields: [barbershopId], references: [id])
+  category          ProductCategory?    @relation(fields: [categoryId], references: [id])
   movements         InventoryMovement[]
   saleItems         SaleItem[]
   createdAt         DateTime            @default(now())
@@ -548,7 +610,23 @@ model Product {
   deletedAt         DateTime?
 
   @@unique([barbershopId, sku])
+  @@unique([barbershopId, barcode])
   @@index([barbershopId, name])
+  @@index([categoryId])
+}
+
+model ProductCategory {
+  id           String     @id @default(uuid())
+  barbershopId String
+  name         String
+  active       Boolean    @default(true)
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id])
+  products     Product[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@unique([barbershopId, name])
+  @@index([barbershopId, active])
 }
 
 model InventoryMovement {
@@ -556,33 +634,38 @@ model InventoryMovement {
   barbershopId String
   productId    String
   userId       String
+  saleId       String?
   type         MovementType
   quantity     Int
   reason       String?
   product      Product      @relation(fields: [productId], references: [id])
   user         User         @relation(fields: [userId], references: [id])
+  sale         Sale?        @relation(fields: [saleId], references: [id], onDelete: Cascade)
   createdAt    DateTime     @default(now())
 
   @@index([barbershopId, createdAt])
+  @@index([saleId])
 }
 
 model Appointment {
-  id           String               @id @default(uuid())
-  barbershopId String
-  customerId   String
-  employeeId   String
-  startAt      DateTime
-  endAt        DateTime
-  status       AppointmentStatus    @default(SCHEDULED)
-  price        Decimal              @db.Decimal(10, 2)
-  notes        String?
-  customer     Customer             @relation(fields: [customerId], references: [id])
-  employee     Employee             @relation(fields: [employeeId], references: [id])
-  barbershop   Barbershop           @relation(fields: [barbershopId], references: [id])
-  services     AppointmentService[]
-  sale         Sale?
-  createdAt    DateTime             @default(now())
-  updatedAt    DateTime             @updatedAt
+  id                 String               @id @default(uuid())
+  barbershopId       String
+  customerId         String
+  employeeId         String
+  startAt            DateTime
+  endAt              DateTime
+  status             AppointmentStatus    @default(SCHEDULED)
+  price              Decimal              @db.Decimal(10, 2)
+  notes              String?
+  cancellationReason String?
+  cancelledAt        DateTime?
+  customer           Customer             @relation(fields: [customerId], references: [id])
+  employee           Employee             @relation(fields: [employeeId], references: [id])
+  barbershop         Barbershop           @relation(fields: [barbershopId], references: [id])
+  services           AppointmentService[]
+  sale               Sale?
+  createdAt          DateTime             @default(now())
+  updatedAt          DateTime             @updatedAt
 
   @@index([barbershopId, startAt])
   @@index([employeeId, startAt, endAt])
@@ -603,24 +686,30 @@ model AppointmentService {
 }
 
 model Sale {
-  id            String       @id @default(uuid())
-  barbershopId  String
-  appointmentId String?      @unique
-  customerId    String?
-  employeeId    String?
-  subtotal      Decimal      @db.Decimal(10, 2)
-  discount      Decimal      @default(0) @db.Decimal(10, 2)
-  total         Decimal      @db.Decimal(10, 2)
-  appointment   Appointment? @relation(fields: [appointmentId], references: [id])
-  customer      Customer?    @relation(fields: [customerId], references: [id])
-  employee      Employee?    @relation(fields: [employeeId], references: [id])
-  barbershop    Barbershop   @relation(fields: [barbershopId], references: [id])
-  items         SaleItem[]
-  payments      Payment[]
-  commissions   Commission[]
-  createdAt     DateTime     @default(now())
+  id                    String                 @id @default(uuid())
+  barbershopId          String
+  appointmentId         String?                @unique
+  customerId            String?
+  employeeId            String?
+  subtotal              Decimal                @db.Decimal(10, 2)
+  discount              Decimal                @default(0) @db.Decimal(10, 2)
+  total                 Decimal                @db.Decimal(10, 2)
+  status                SaleStatus             @default(COMPLETED)
+  discountReason        String?
+  completedAt           DateTime?
+  appointment           Appointment?           @relation(fields: [appointmentId], references: [id])
+  customer              Customer?              @relation(fields: [customerId], references: [id])
+  employee              Employee?              @relation(fields: [employeeId], references: [id])
+  barbershop            Barbershop             @relation(fields: [barbershopId], references: [id])
+  items                 SaleItem[]
+  payments              Payment[]
+  commissions           Commission[]
+  inventoryMovements    InventoryMovement[]
+  financialTransactions FinancialTransaction[]
+  createdAt             DateTime               @default(now())
 
   @@index([barbershopId, createdAt])
+  @@index([barbershopId, status, createdAt])
 }
 
 model SaleItem {
@@ -653,59 +742,211 @@ model Payment {
 }
 
 model Commission {
-  id           String           @id @default(uuid())
-  barbershopId String
-  saleId       String
-  employeeId   String
-  amount       Decimal          @db.Decimal(10, 2)
-  percentage   Decimal?         @db.Decimal(5, 2)
-  status       CommissionStatus @default(PENDING)
-  paidAt       DateTime?
-  notes        String?
-  sale         Sale             @relation(fields: [saleId], references: [id])
-  employee     Employee         @relation(fields: [employeeId], references: [id])
-  barbershop   Barbershop       @relation(fields: [barbershopId], references: [id])
-  createdAt    DateTime         @default(now())
+  id                     String                @id @default(uuid())
+  barbershopId           String
+  saleId                 String
+  employeeId             String
+  amount                 Decimal               @db.Decimal(10, 2)
+  percentage             Decimal?              @db.Decimal(5, 2)
+  status                 CommissionStatus      @default(PENDING)
+  paidAt                 DateTime?
+  paidById               String?
+  paymentMethod          PaymentMethod?
+  financialTransactionId String?
+  notes                  String?
+  calculation            Json?
+  sale                   Sale                  @relation(fields: [saleId], references: [id])
+  employee               Employee              @relation(fields: [employeeId], references: [id])
+  barbershop             Barbershop            @relation(fields: [barbershopId], references: [id])
+  paidBy                 User?                 @relation("CommissionPaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  financialTransaction   FinancialTransaction? @relation(fields: [financialTransactionId], references: [id], onDelete: SetNull)
+  createdAt              DateTime              @default(now())
 
   @@unique([saleId, employeeId])
   @@index([barbershopId, status])
+  @@index([employeeId, status, createdAt])
+  @@index([financialTransactionId])
 }
 
 model CashRegister {
   id              String                 @id @default(uuid())
   barbershopId    String
   openedById      String
+  closedById      String?
   openingBalance  Decimal                @db.Decimal(10, 2)
   closingBalance  Decimal?               @db.Decimal(10, 2)
   expectedBalance Decimal?               @db.Decimal(10, 2)
   difference      Decimal?               @db.Decimal(10, 2)
   openedAt        DateTime               @default(now())
   closedAt        DateTime?
+  closingNotes    String?
   barbershop      Barbershop             @relation(fields: [barbershopId], references: [id])
-  openedBy        User                   @relation(fields: [openedById], references: [id])
+  openedBy        User                   @relation("CashRegisterOpenedBy", fields: [openedById], references: [id])
+  closedBy        User?                  @relation("CashRegisterClosedBy", fields: [closedById], references: [id], onDelete: SetNull)
   transactions    FinancialTransaction[]
 
   @@index([barbershopId, openedAt])
 }
 
 model FinancialTransaction {
-  id             String          @id @default(uuid())
-  barbershopId   String
-  cashRegisterId String?
-  type           FinancialType
-  category       String
-  description    String
-  amount         Decimal         @db.Decimal(10, 2)
-  method         PaymentMethod?
-  status         FinancialStatus @default(PAID)
-  dueDate        DateTime?
-  paidAt         DateTime?
-  notes          String?
-  barbershop     Barbershop      @relation(fields: [barbershopId], references: [id])
-  cashRegister   CashRegister?   @relation(fields: [cashRegisterId], references: [id])
-  createdAt      DateTime        @default(now())
+  id                 String             @id @default(uuid())
+  barbershopId       String
+  cashRegisterId     String?
+  saleId             String?
+  type               FinancialType
+  origin             FinancialOrigin    @default(MANUAL)
+  category           String
+  description        String
+  amount             Decimal            @db.Decimal(10, 2)
+  method             PaymentMethod?
+  status             FinancialStatus    @default(PAID)
+  dueDate            DateTime?
+  paidAt             DateTime?
+  notes              String?
+  cancelledAt        DateTime?
+  cancelledById      String?
+  cancellationReason String?
+  barbershop         Barbershop         @relation(fields: [barbershopId], references: [id])
+  cashRegister       CashRegister?      @relation(fields: [cashRegisterId], references: [id])
+  sale               Sale?              @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  commissions        Commission[]
+  accountPayable     AccountPayable?
+  accountReceivable  AccountReceivable?
+  cancelledBy        User?              @relation("FinancialTransactionCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
 
   @@index([barbershopId, createdAt])
+  @@index([saleId])
+}
+
+model Supplier {
+  id                 String              @id @default(uuid())
+  barbershopId       String
+  name               String
+  document           String?
+  contactName        String?
+  phone              String?
+  email              String?
+  notes              String?
+  active             Boolean             @default(true)
+  barbershop         Barbershop          @relation(fields: [barbershopId], references: [id])
+  expenseRecurrences ExpenseRecurrence[]
+  accountsPayable    AccountPayable[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@unique([barbershopId, document])
+  @@index([barbershopId, name])
+  @@index([barbershopId, active])
+}
+
+model FinancialCategory {
+  id                 String                @id @default(uuid())
+  barbershopId       String
+  name               String
+  type               FinancialCategoryType
+  active             Boolean               @default(true)
+  barbershop         Barbershop            @relation(fields: [barbershopId], references: [id])
+  expenseRecurrences ExpenseRecurrence[]
+  accountsPayable    AccountPayable[]
+  accountsReceivable AccountReceivable[]
+  createdAt          DateTime              @default(now())
+  updatedAt          DateTime              @updatedAt
+
+  @@unique([barbershopId, type, name])
+  @@index([barbershopId, type, active])
+}
+
+model ExpenseRecurrence {
+  id              String              @id @default(uuid())
+  barbershopId    String
+  supplierId      String?
+  categoryId      String?
+  description     String
+  amount          Decimal             @db.Decimal(10, 2)
+  frequency       RecurrenceFrequency
+  intervalCount   Int                 @default(1)
+  nextDueDate     DateTime
+  endDate         DateTime?
+  active          Boolean             @default(true)
+  lastGeneratedAt DateTime?
+  notes           String?
+  barbershop      Barbershop          @relation(fields: [barbershopId], references: [id])
+  supplier        Supplier?           @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  category        FinancialCategory?  @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  accountsPayable AccountPayable[]
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([barbershopId, active, nextDueDate])
+  @@index([supplierId])
+  @@index([categoryId])
+}
+
+model AccountPayable {
+  id                     String                @id @default(uuid())
+  barbershopId           String
+  supplierId             String?
+  categoryId             String?
+  recurrenceId           String?
+  recurrenceDueDate      DateTime?
+  description            String
+  documentNumber         String?
+  amount                 Decimal               @db.Decimal(10, 2)
+  dueDate                DateTime
+  status                 AccountStatus         @default(PENDING)
+  paidAt                 DateTime?
+  paymentMethod          PaymentMethod?
+  financialTransactionId String?               @unique
+  paidById               String?
+  notes                  String?
+  cancelledAt            DateTime?
+  cancellationReason     String?
+  barbershop             Barbershop            @relation(fields: [barbershopId], references: [id])
+  supplier               Supplier?             @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  category               FinancialCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  recurrence             ExpenseRecurrence?    @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+  financialTransaction   FinancialTransaction? @relation(fields: [financialTransactionId], references: [id], onDelete: SetNull)
+  paidBy                 User?                 @relation("AccountPayablePaidBy", fields: [paidById], references: [id], onDelete: SetNull)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  @@unique([recurrenceId, recurrenceDueDate])
+  @@index([barbershopId, status, dueDate])
+  @@index([supplierId])
+  @@index([categoryId])
+  @@index([recurrenceId])
+}
+
+model AccountReceivable {
+  id                     String                @id @default(uuid())
+  barbershopId           String
+  customerId             String
+  categoryId             String?
+  description            String
+  documentNumber         String?
+  amount                 Decimal               @db.Decimal(10, 2)
+  dueDate                DateTime
+  status                 AccountStatus         @default(PENDING)
+  receivedAt             DateTime?
+  paymentMethod          PaymentMethod?
+  financialTransactionId String?               @unique
+  receivedById           String?
+  notes                  String?
+  cancelledAt            DateTime?
+  cancellationReason     String?
+  barbershop             Barbershop            @relation(fields: [barbershopId], references: [id])
+  customer               Customer              @relation(fields: [customerId], references: [id])
+  category               FinancialCategory?    @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  financialTransaction   FinancialTransaction? @relation(fields: [financialTransactionId], references: [id], onDelete: SetNull)
+  receivedBy             User?                 @relation("AccountReceivableReceivedBy", fields: [receivedById], references: [id], onDelete: SetNull)
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  @@index([barbershopId, status, dueDate])
+  @@index([customerId])
+  @@index([categoryId])
 }
 
 model Notification {
@@ -739,15 +980,16 @@ model AuditLog {
 }
 
 model Setting {
-  id                          String     @id @default(uuid())
-  barbershopId                String     @unique
-  currency                    String     @default("BRL")
-  timezone                    String     @default("America/Sao_Paulo")
-  allowNegativeStock          Boolean    @default(false)
-  publicBooking               Boolean    @default(true)
-  allowDuplicateCustomerPhone Boolean    @default(false)
-  allowDuplicateCustomerCpf   Boolean    @default(false)
-  openingHours                Json?
-  barbershop                  Barbershop @relation(fields: [barbershopId], references: [id])
-  updatedAt                   DateTime   @updatedAt
+  id                             String     @id @default(uuid())
+  barbershopId                   String     @unique
+  currency                       String     @default("BRL")
+  timezone                       String     @default("America/Sao_Paulo")
+  allowNegativeStock             Boolean    @default(false)
+  publicBooking                  Boolean    @default(true)
+  allowDuplicateCustomerPhone    Boolean    @default(false)
+  allowDuplicateCustomerCpf      Boolean    @default(false)
+  allowMultipleOpenCashRegisters Boolean    @default(false)
+  openingHours                   Json?
+  barbershop                     Barbershop @relation(fields: [barbershopId], references: [id])
+  updatedAt                      DateTime   @updatedAt
 }

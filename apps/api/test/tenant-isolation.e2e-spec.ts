@@ -31,6 +31,8 @@ describe('Isolamento multi-tenant (e2e)', () => {
   let createdPlanId: string | undefined;
   let employeeAId: string;
   let employeeBId: string;
+  let customerAId: string;
+  let customerBId: string;
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const password = 'Test@1234';
 
@@ -133,12 +135,16 @@ describe('Isolamento multi-tenant (e2e)', () => {
     superAdminId = superAdmin.id;
 
     await Promise.all([
-      db.customer.create({
-        data: { barbershopId: shopAId, name: `Cliente A ${suffix}`, phone: '11911111111' },
-      }),
-      db.customer.create({
-        data: { barbershopId: shopBId, name: `Cliente B ${suffix}`, phone: '11922222222' },
-      }),
+      db.customer
+        .create({
+          data: { barbershopId: shopAId, name: `Cliente A ${suffix}`, phone: '11911111111' },
+        })
+        .then((customer) => (customerAId = customer.id)),
+      db.customer
+        .create({
+          data: { barbershopId: shopBId, name: `Cliente B ${suffix}`, phone: '11922222222' },
+        })
+        .then((customer) => (customerBId = customer.id)),
       db.employee
         .create({ data: { barbershopId: shopAId, name: `Colaborador A ${suffix}` } })
         .then((employee) => (employeeAId = employee.id)),
@@ -161,6 +167,7 @@ describe('Isolamento multi-tenant (e2e)', () => {
     if (shopIds.length) {
       await db.employee.deleteMany({ where: { barbershopId: { in: shopIds } } });
       await db.customer.deleteMany({ where: { barbershopId: { in: shopIds } } });
+      await db.setting.deleteMany({ where: { barbershopId: { in: shopIds } } });
       await db.subscription.deleteMany({ where: { barbershopId: { in: shopIds } } });
       await db.barbershop.deleteMany({ where: { id: { in: shopIds } } });
     }
@@ -459,6 +466,662 @@ describe('Isolamento multi-tenant (e2e)', () => {
     }
   });
 
+  it('valida o catálogo completo de serviços, permissões e isolamento', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    const tokenB = await login(`admin-b-${suffix}@example.com`);
+    const receptionistToken = await login(`receptionist-a-${suffix}@example.com`);
+    let categoryId: string | undefined;
+    let serviceId: string | undefined;
+
+    try {
+      const category = await request(app.getHttpServer())
+        .post('/api/services/categories')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: `Categoria ${suffix}` })
+        .expect(201);
+      categoryId = category.body.id;
+
+      const created = await request(app.getHttpServer())
+        .post('/api/services')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          name: `Serviço ${suffix}`,
+          categoryId,
+          price: 49.9,
+          durationMinutes: 45,
+          commissionFixed: 15,
+        })
+        .expect(201);
+      serviceId = created.body.id;
+      expect(created.body.category.id).toBe(categoryId);
+
+      await request(app.getHttpServer())
+        .post('/api/services')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          name: 'Comissão inválida',
+          price: 40,
+          durationMinutes: 30,
+          commissionPercent: 50,
+          commissionFixed: 10,
+        })
+        .expect(400);
+
+      const updated = await request(app.getHttpServer())
+        .patch(`/api/services/${serviceId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ commissionPercent: 35, commissionFixed: null })
+        .expect(200);
+      expect(Number(updated.body.commissionPercent)).toBe(35);
+      expect(updated.body.commissionFixed).toBeNull();
+
+      await request(app.getHttpServer())
+        .post(`/api/services/${serviceId}/professionals/${employeeAId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ commissionFixed: 20 })
+        .expect(201);
+
+      const details = await request(app.getHttpServer())
+        .get(`/api/services/${serviceId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(details.body.service.employeeServices[0].employeeId).toBe(employeeAId);
+      expect(details.body.commissionPriority).toHaveLength(3);
+
+      await request(app.getHttpServer())
+        .patch(`/api/services/${serviceId}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ name: 'Invasão' })
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/services/${serviceId}/professionals/${employeeBId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({})
+        .expect(404);
+      await request(app.getHttpServer())
+        .patch(`/api/services/${serviceId}/status`)
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .send({ active: false })
+        .expect(403);
+
+      const inactive = await request(app.getHttpServer())
+        .patch(`/api/services/${serviceId}/status`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ active: false })
+        .expect(200);
+      expect(inactive.body.active).toBe(false);
+    } finally {
+      if (serviceId) {
+        await db.employeeService.deleteMany({ where: { serviceId } });
+        await db.service.deleteMany({ where: { id: serviceId } });
+      }
+      if (categoryId) await db.serviceCategory.deleteMany({ where: { id: categoryId } });
+    }
+  });
+
+  it('valida produtos, estoque, identificadores e concorrência na baixa', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    const tokenB = await login(`admin-b-${suffix}@example.com`);
+    const receptionistToken = await login(`receptionist-a-${suffix}@example.com`);
+    let categoryId: string | undefined;
+    let productId: string | undefined;
+    const sku = `SKU-${suffix}`;
+    const barcode = `789${Date.now()}`;
+
+    try {
+      const category = await request(app.getHttpServer())
+        .post('/api/products/categories')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: `Produtos ${suffix}` })
+        .expect(201);
+      categoryId = category.body.id;
+
+      const created = await request(app.getHttpServer())
+        .post('/api/products')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          name: `Produto ${suffix}`,
+          categoryId,
+          sku,
+          barcode,
+          costPrice: 10,
+          salePrice: 25,
+          minimumStock: 2,
+        })
+        .expect(201);
+      productId = created.body.id;
+
+      await request(app.getHttpServer())
+        .post('/api/products')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: 'SKU repetido', sku, costPrice: 5, salePrice: 10, minimumStock: 0 })
+        .expect(409);
+      await request(app.getHttpServer())
+        .post('/api/products')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: 'Barcode repetido', barcode, costPrice: 5, salePrice: 10, minimumStock: 0 })
+        .expect(409);
+
+      await request(app.getHttpServer())
+        .post(`/api/products/${productId}/movements`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ type: 'ENTRY', quantity: 1, reason: 'Carga inicial' })
+        .expect(201);
+
+      const losses = await Promise.all([
+        request(app.getHttpServer())
+          .post(`/api/products/${productId}/movements`)
+          .set('Authorization', `Bearer ${tokenA}`)
+          .send({ type: 'LOSS', quantity: 1, reason: 'Concorrência A' }),
+        request(app.getHttpServer())
+          .post(`/api/products/${productId}/movements`)
+          .set('Authorization', `Bearer ${tokenA}`)
+          .send({ type: 'LOSS', quantity: 1, reason: 'Concorrência B' }),
+      ]);
+      expect(losses.map(({ status }) => status).sort()).toEqual([201, 409]);
+
+      const details = await request(app.getHttpServer())
+        .get(`/api/products/${productId}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(details.body.stockQuantity).toBe(0);
+      expect(details.body.lowStock).toBe(true);
+      expect(details.body.movements).toHaveLength(2);
+
+      await request(app.getHttpServer())
+        .patch(`/api/products/${productId}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ name: 'Invasão' })
+        .expect(404);
+      await request(app.getHttpServer())
+        .post(`/api/products/${productId}/movements`)
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .send({ type: 'ENTRY', quantity: 1 })
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .patch('/api/products/settings/stock')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ allowNegativeStock: true })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`/api/products/${productId}/movements`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ type: 'ADJUSTMENT', quantity: -2, reason: 'Inventário' })
+        .expect(201);
+      const negative = await db.product.findUniqueOrThrow({ where: { id: productId } });
+      expect(negative.stockQuantity).toBe(-2);
+    } finally {
+      if (productId) {
+        await db.inventoryMovement.deleteMany({ where: { productId } });
+        await db.product.deleteMany({ where: { id: productId } });
+      }
+      if (categoryId) await db.productCategory.deleteMany({ where: { id: categoryId } });
+    }
+  });
+
+  it('valida agenda, múltiplos serviços, status, isolamento e disputa de horário', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    const tokenB = await login(`admin-b-${suffix}@example.com`);
+    const appointmentIds: string[] = [];
+    const serviceIds: string[] = [];
+    let scheduleId: string | undefined;
+
+    try {
+      const schedule = await db.workSchedule.create({
+        data: {
+          barbershopId: shopAId,
+          employeeId: employeeAId,
+          weekday: 1,
+          startTime: '08:00',
+          endTime: '12:00',
+          breakStart: '10:00',
+          breakEnd: '10:30',
+        },
+      });
+      scheduleId = schedule.id;
+      for (const [name, price, durationMinutes] of [
+        [`Corte agenda ${suffix}`, 40, 30],
+        [`Barba agenda ${suffix}`, 25, 20],
+      ] as const) {
+        const service = await db.service.create({
+          data: { barbershopId: shopAId, name, price, durationMinutes },
+        });
+        serviceIds.push(service.id);
+        await db.employeeService.create({
+          data: { barbershopId: shopAId, employeeId: employeeAId, serviceId: service.id },
+        });
+      }
+
+      const slots = await request(app.getHttpServer())
+        .post('/api/appointments/available-slots')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ employeeId: employeeAId, serviceIds, date: '2030-01-07', stepMinutes: 10 })
+        .expect(201);
+      expect(slots.body.durationMinutes).toBe(50);
+      expect(slots.body.slots[0].startAt).toBe('2030-01-07T11:00:00.000Z');
+
+      const payload = {
+        customerId: customerAId,
+        employeeId: employeeAId,
+        serviceIds,
+        startAt: '2030-01-07T11:00:00.000Z',
+      };
+      const disputed = await Promise.all([
+        request(app.getHttpServer())
+          .post('/api/appointments')
+          .set('Authorization', `Bearer ${tokenA}`)
+          .send(payload),
+        request(app.getHttpServer())
+          .post('/api/appointments')
+          .set('Authorization', `Bearer ${tokenA}`)
+          .send(payload),
+      ]);
+      expect(disputed.map(({ status }) => status).sort()).toEqual([201, 409]);
+      const created = disputed.find(({ status }) => status === 201)!;
+      appointmentIds.push(created.body.id);
+      expect(Number(created.body.price)).toBe(65);
+      expect(created.body.services).toHaveLength(2);
+
+      const updated = await request(app.getHttpServer())
+        .patch(`/api/appointments/${created.body.id}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ startAt: '2030-01-07T11:30:00.000Z' })
+        .expect(200);
+      expect(updated.body.startAt).toBe('2030-01-07T11:30:00.000Z');
+
+      await request(app.getHttpServer())
+        .post(`/api/appointments/${created.body.id}/confirm`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(201);
+      const cancelled = await request(app.getHttpServer())
+        .post(`/api/appointments/${created.body.id}/cancel`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ reason: 'Cliente solicitou' })
+        .expect(201);
+      expect(cancelled.body.status).toBe('CANCELLED');
+      expect(cancelled.body.cancellationReason).toBe('Cliente solicitou');
+
+      const noShow = await request(app.getHttpServer())
+        .post('/api/appointments')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...payload, serviceIds: [serviceIds[0]], startAt: '2030-01-07T12:00:00.000Z' })
+        .expect(201);
+      appointmentIds.push(noShow.body.id);
+      const missed = await request(app.getHttpServer())
+        .post(`/api/appointments/${noShow.body.id}/no-show`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(201);
+      expect(missed.body.status).toBe('NO_SHOW');
+
+      const list = await request(app.getHttpServer())
+        .get('/api/appointments?start=2030-01-07T00:00:00.000Z&end=2030-01-08T00:00:00.000Z')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(list.body.map((item: { id: string }) => item.id)).toEqual(
+        expect.arrayContaining(appointmentIds),
+      );
+
+      await request(app.getHttpServer())
+        .post('/api/appointments')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ ...payload, customerId: customerBId, startAt: '2030-01-07T13:30:00.000Z' })
+        .expect(404);
+      await request(app.getHttpServer())
+        .patch(`/api/appointments/${created.body.id}`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ notes: 'Invasão' })
+        .expect(404);
+    } finally {
+      await db.appointment.deleteMany({
+        where: {
+          employeeId: employeeAId,
+          startAt: {
+            gte: new Date('2030-01-07T00:00:00.000Z'),
+            lt: new Date('2030-01-08T00:00:00.000Z'),
+          },
+        },
+      });
+      await db.employeeService.deleteMany({ where: { serviceId: { in: serviceIds } } });
+      await db.service.deleteMany({ where: { id: { in: serviceIds } } });
+      if (scheduleId) await db.workSchedule.deleteMany({ where: { id: scheduleId } });
+    }
+  });
+
+  it('finaliza venda dividida e reverte toda a transacao quando o estoque falha', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    await db.setting.upsert({
+      where: { barbershopId: shopAId },
+      update: { allowNegativeStock: false },
+      create: { barbershopId: shopAId, allowNegativeStock: false },
+    });
+    const service = await db.service.create({
+      data: {
+        barbershopId: shopAId,
+        name: `Corte venda ${suffix}`,
+        price: 50,
+        durationMinutes: 30,
+        commissionPercent: 20,
+      },
+    });
+    await db.employeeService.create({
+      data: { barbershopId: shopAId, employeeId: employeeAId, serviceId: service.id },
+    });
+    const stocked = await db.product.create({
+      data: {
+        barbershopId: shopAId,
+        name: `A produto ${suffix}`,
+        costPrice: 10,
+        salePrice: 30,
+        stockQuantity: 2,
+        commissionPercent: 10,
+      },
+    });
+    const unavailable = await db.product.create({
+      data: {
+        barbershopId: shopAId,
+        name: `Z sem estoque ${suffix}`,
+        costPrice: 5,
+        salePrice: 20,
+        stockQuantity: 0,
+      },
+    });
+    let saleId: string | undefined;
+    let commissionTransactionId: string | undefined;
+    try {
+      const sale = await request(app.getHttpServer())
+        .post('/api/sales/walk-in')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ employeeId: employeeAId, customerId: customerAId })
+        .expect(201);
+      saleId = sale.body.id;
+
+      await request(app.getHttpServer())
+        .post(`/api/sales/${saleId}/items/services`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ serviceId: service.id, quantity: 1 })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/api/sales/${saleId}/items/products`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ productId: stocked.id, quantity: 1 })
+        .expect(201);
+      const withUnavailable = await request(app.getHttpServer())
+        .post(`/api/sales/${saleId}/items/products`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ productId: unavailable.id, quantity: 1 })
+        .expect(201);
+
+      const receptionistToken = await login(`receptionist-a-${suffix}@example.com`);
+      await request(app.getHttpServer())
+        .patch(`/api/sales/${saleId}/discount`)
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .send({ amount: 5, reason: 'Sem autorizacao' })
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .post(`/api/sales/${saleId}/finalize`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ payments: [{ method: 'PIX', amount: 100 }] })
+        .expect(409);
+
+      const [afterFailure, failedSale, failedMovements, failedTransactions] = await Promise.all([
+        db.product.findUniqueOrThrow({ where: { id: stocked.id } }),
+        db.sale.findUniqueOrThrow({ where: { id: saleId } }),
+        db.inventoryMovement.count({ where: { saleId } }),
+        db.financialTransaction.count({ where: { saleId } }),
+      ]);
+      expect(afterFailure.stockQuantity).toBe(2);
+      expect(failedSale.status).toBe('DRAFT');
+      expect(failedMovements).toBe(0);
+      expect(failedTransactions).toBe(0);
+
+      const unavailableItem = withUnavailable.body.items.find(
+        (item: { productId?: string }) => item.productId === unavailable.id,
+      );
+      await request(app.getHttpServer())
+        .delete(`/api/sales/${saleId}/items/${unavailableItem.id}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      await request(app.getHttpServer())
+        .patch(`/api/sales/${saleId}/discount`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ amount: 10, reason: 'Cortesia de fidelidade' })
+        .expect(200);
+      await request(app.getHttpServer())
+        .post(`/api/sales/${saleId}/finalize`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          payments: [
+            { method: 'PIX', amount: 40 },
+            { method: 'CASH', amount: 30 },
+          ],
+        })
+        .expect(201);
+
+      const [finished, updatedProduct, movements, transactions, commissions] = await Promise.all([
+        db.sale.findUniqueOrThrow({ where: { id: saleId }, include: { payments: true } }),
+        db.product.findUniqueOrThrow({ where: { id: stocked.id } }),
+        db.inventoryMovement.count({ where: { saleId } }),
+        db.financialTransaction.count({ where: { saleId } }),
+        db.commission.findMany({ where: { saleId } }),
+      ]);
+      expect(finished.status).toBe('COMPLETED');
+      expect(Number(finished.total)).toBe(70);
+      expect(finished.payments).toHaveLength(2);
+      expect(updatedProduct.stockQuantity).toBe(1);
+      expect(movements).toBe(1);
+      expect(transactions).toBe(2);
+      expect(commissions).toHaveLength(1);
+      expect(Number(commissions[0].amount)).toBe(13);
+      expect(commissions[0].calculation).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ source: 'SERVICE', ruleType: 'PERCENT', amount: 10 }),
+          expect.objectContaining({ source: 'PRODUCT', ruleType: 'PERCENT', amount: 3 }),
+        ]),
+      );
+
+      const commissionList = await request(app.getHttpServer())
+        .get('/api/commissions?start=2026-01-01T00:00:00.000Z&end=2027-01-01T00:00:00.000Z')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .expect(200);
+      expect(commissionList.body.items.map((item: { id: string }) => item.id)).toContain(
+        commissions[0].id,
+      );
+      expect(commissionList.body.summary).toEqual(
+        expect.objectContaining({ sold: expect.any(Number), commission: expect.any(Number) }),
+      );
+      await request(app.getHttpServer())
+        .get('/api/commissions')
+        .set('Authorization', `Bearer ${receptionistToken}`)
+        .expect(403);
+
+      await request(app.getHttpServer())
+        .patch(`/api/commissions/${commissions[0].id}`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ amount: 14, reason: 'Ajuste acordado com o profissional' })
+        .expect(200);
+      const paid = await request(app.getHttpServer())
+        .post('/api/commissions/pay')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          commissionIds: [commissions[0].id],
+          method: 'PIX',
+          notes: 'Fechamento semanal',
+        })
+        .expect(201);
+      commissionTransactionId = paid.body.transaction.id;
+
+      const [paidCommission, expense, audits] = await Promise.all([
+        db.commission.findUniqueOrThrow({ where: { id: commissions[0].id } }),
+        db.financialTransaction.findUniqueOrThrow({ where: { id: commissionTransactionId } }),
+        db.auditLog.findMany({
+          where: {
+            barbershopId: shopAId,
+            action: { in: ['COMMISSION_ADJUSTED', 'COMMISSIONS_PAID'] },
+          },
+        }),
+      ]);
+      expect(paidCommission.status).toBe('PAID');
+      expect(paidCommission.paidById).toBe(userBId);
+      expect(paidCommission.paymentMethod).toBe('PIX');
+      expect(Number(expense.amount)).toBe(14);
+      expect(expense.type).toBe('EXPENSE');
+      expect(audits.map((audit) => audit.action)).toEqual(
+        expect.arrayContaining(['COMMISSION_ADJUSTED', 'COMMISSIONS_PAID']),
+      );
+      await request(app.getHttpServer())
+        .post(`/api/commissions/${commissions[0].id}/pay`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ method: 'CASH' })
+        .expect(409);
+    } finally {
+      if (saleId) {
+        await db.commission.deleteMany({ where: { saleId } });
+        await db.sale.deleteMany({ where: { id: saleId } });
+      }
+      if (commissionTransactionId) {
+        await db.financialTransaction.deleteMany({ where: { id: commissionTransactionId } });
+      }
+      await db.auditLog.deleteMany({
+        where: {
+          barbershopId: shopAId,
+          action: { in: ['COMMISSION_ADJUSTED', 'COMMISSIONS_PAID'] },
+        },
+      });
+      await db.employeeService.deleteMany({ where: { serviceId: service.id } });
+      await db.service.deleteMany({ where: { id: service.id } });
+      await db.product.deleteMany({ where: { id: { in: [stocked.id, unavailable.id] } } });
+    }
+  });
+
+  it('isola e baixa contas a pagar e receber com lançamentos financeiros', async () => {
+    const tokenA = await login(`admin-a-${suffix}@example.com`);
+    const tokenB = await login(`admin-b-${suffix}@example.com`);
+    const transactionIds: string[] = [];
+    let supplierId: string | undefined;
+    let expenseCategoryId: string | undefined;
+    let incomeCategoryId: string | undefined;
+    try {
+      const supplier = await request(app.getHttpServer())
+        .post('/api/suppliers')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: `Fornecedor ${suffix}`, document: '12.345.678/0001-99' })
+        .expect(201);
+      supplierId = supplier.body.id;
+      const expenseCategory = await request(app.getHttpServer())
+        .post('/api/financial-categories')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: `Despesa ${suffix}`, type: 'EXPENSE' })
+        .expect(201);
+      expenseCategoryId = expenseCategory.body.id;
+      const incomeCategory = await request(app.getHttpServer())
+        .post('/api/financial-categories')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ name: `Receita ${suffix}`, type: 'INCOME' })
+        .expect(201);
+      incomeCategoryId = incomeCategory.body.id;
+
+      const payable = await request(app.getHttpServer())
+        .post('/api/accounts/payable')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          supplierId,
+          categoryId: expenseCategoryId,
+          description: `Aluguel ${suffix}`,
+          amount: 450,
+          dueDate: '2026-10-10',
+        })
+        .expect(201);
+      await request(app.getHttpServer())
+        .post(`/api/accounts/payable/${payable.body.id}/pay`)
+        .set('Authorization', `Bearer ${tokenB}`)
+        .send({ method: 'PIX' })
+        .expect(404);
+      const paid = await request(app.getHttpServer())
+        .post(`/api/accounts/payable/${payable.body.id}/pay`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ method: 'PIX' })
+        .expect(201);
+      transactionIds.push(paid.body.transaction.id);
+      expect(paid.body.transaction.origin).toBe('ACCOUNT_PAYABLE');
+      expect(paid.body.transaction.type).toBe('EXPENSE');
+
+      await request(app.getHttpServer())
+        .post('/api/accounts/receivable')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          customerId: customerBId,
+          description: `Inválida ${suffix}`,
+          amount: 10,
+          dueDate: '2026-10-10',
+        })
+        .expect(404);
+      const receivable = await request(app.getHttpServer())
+        .post('/api/accounts/receivable')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          customerId: customerAId,
+          categoryId: incomeCategoryId,
+          description: `Crédito ${suffix}`,
+          amount: 90,
+          dueDate: '2026-10-10',
+        })
+        .expect(201);
+      const received = await request(app.getHttpServer())
+        .post(`/api/accounts/receivable/${receivable.body.id}/receive`)
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({ method: 'CASH' })
+        .expect(201);
+      transactionIds.push(received.body.transaction.id);
+      expect(received.body.transaction.origin).toBe('ACCOUNT_RECEIVABLE');
+      expect(received.body.transaction.type).toBe('INCOME');
+
+      await request(app.getHttpServer())
+        .post('/api/expense-recurrences')
+        .set('Authorization', `Bearer ${tokenA}`)
+        .send({
+          supplierId,
+          categoryId: expenseCategoryId,
+          description: `Internet ${suffix}`,
+          amount: 120,
+          dueDate: '2026-10-15',
+          frequency: 'MONTHLY',
+          intervalCount: 1,
+        })
+        .expect(201);
+      const tenantBList = await request(app.getHttpServer())
+        .get('/api/accounts/payable')
+        .set('Authorization', `Bearer ${tokenB}`)
+        .expect(200);
+      expect(
+        tenantBList.body.items.some((item: { description: string }) =>
+          item.description.includes(suffix),
+        ),
+      ).toBe(false);
+    } finally {
+      await db.accountPayable.deleteMany({ where: { barbershopId: shopAId } });
+      await db.accountReceivable.deleteMany({ where: { barbershopId: shopAId } });
+      await db.expenseRecurrence.deleteMany({ where: { barbershopId: shopAId } });
+      if (transactionIds.length) {
+        await db.financialTransaction.deleteMany({ where: { id: { in: transactionIds } } });
+      }
+      await db.auditLog.deleteMany({
+        where: {
+          barbershopId: shopAId,
+          action: { in: ['ACCOUNT_PAYABLE_PAID', 'ACCOUNT_RECEIVABLE_RECEIVED'] },
+        },
+      });
+      if (supplierId) await db.supplier.deleteMany({ where: { id: supplierId } });
+      const categoryIds = [expenseCategoryId, incomeCategoryId].filter((id): id is string =>
+        Boolean(id),
+      );
+      if (categoryIds.length) {
+        await db.financialCategory.deleteMany({ where: { id: { in: categoryIds } } });
+      }
+    }
+  });
+
   it('permite ao Super Admin cadastrar um tenant com administrador inicial', async () => {
     const token = await login(`super-${suffix}@example.com`);
     const plans = await request(app.getHttpServer())
@@ -494,7 +1157,7 @@ describe('Isolamento multi-tenant (e2e)', () => {
         ownerName: 'Novo Proprietário',
         email: `tenant-${suffix}@example.com`,
         documentType: 'CPF',
-        document: '12345678901',
+        document: String(Date.now()).slice(-11),
         phone: '11999999999',
         planId: createdPlanId,
         adminName: 'Novo Administrador',

@@ -11,6 +11,7 @@ jest.mock('node:fs/promises', () => ({
 describe('DataService tenant isolation', () => {
   let db: any;
   let service: DataService;
+  let availability: any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -49,20 +50,63 @@ describe('DataService tenant isolation', () => {
         findUnique: jest.fn().mockResolvedValue(null),
         upsert: jest.fn(),
       },
-      service: { findMany: jest.fn().mockResolvedValue([]) },
-      product: { findMany: jest.fn().mockResolvedValue([]) },
+      service: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      serviceCategory: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      employeeService: {
+        findFirst: jest.fn(),
+        upsert: jest.fn(),
+        delete: jest.fn(),
+      },
+      product: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        findUniqueOrThrow: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+        updateMany: jest.fn(),
+      },
+      productCategory: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+      },
+      inventoryMovement: { create: jest.fn() },
       appointment: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn().mockResolvedValue(null),
         count: jest.fn().mockResolvedValue(0),
+        create: jest.fn(),
+        update: jest.fn(),
       },
+      appointmentService: { deleteMany: jest.fn() },
       sale: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { total: null }, _avg: { total: null } }),
         findMany: jest.fn().mockResolvedValue([]),
       },
       commission: {
         aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+        updateMany: jest.fn(),
+        update: jest.fn(),
+        findFirst: jest.fn(),
       },
+      financialTransaction: {
+        create: jest.fn(),
+        findFirst: jest.fn(),
+        findMany: jest.fn().mockResolvedValue([]),
+        update: jest.fn(),
+      },
+      auditLog: { create: jest.fn() },
       workSchedule: {
         create: jest.fn(),
         findFirst: jest.fn(),
@@ -74,10 +118,107 @@ describe('DataService tenant isolation', () => {
         findFirst: jest.fn(),
         delete: jest.fn(),
       },
-      cashRegister: { findFirst: jest.fn().mockResolvedValue(null) },
+      cashRegister: {
+        findFirst: jest.fn().mockResolvedValue(null),
+        findMany: jest.fn().mockResolvedValue([]),
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      supplier: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      financialCategory: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      accountPayable: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn(),
+        update: jest.fn(),
+        upsert: jest.fn(),
+      },
+      accountReceivable: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        count: jest.fn().mockResolvedValue(0),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
+      expenseRecurrence: {
+        findMany: jest.fn().mockResolvedValue([]),
+        findFirst: jest.fn(),
+        create: jest.fn(),
+        update: jest.fn(),
+      },
     };
+    db.$queryRaw = jest.fn().mockResolvedValue([]);
+    db.$executeRaw = jest.fn().mockResolvedValue(1);
     db.$transaction = jest.fn((callback) => callback(db));
-    service = new DataService(db, { barbershopId: 'shop-1' } as any);
+    availability = {
+      employeeSlots: jest.fn(),
+      assertEmployeeAvailable: jest.fn().mockResolvedValue(undefined),
+    };
+    service = new DataService(
+      db,
+      { barbershopId: 'shop-1', userId: 'user-1' } as any,
+      availability,
+    );
+  });
+
+  it('paga múltiplas comissões em uma única saída financeira auditada', async () => {
+    db.commission.findMany
+      .mockResolvedValueOnce([
+        { id: 'commission-1', amount: 12, employee: { name: 'Ana' } },
+        { id: 'commission-2', amount: 18, employee: { name: 'Bia' } },
+      ])
+      .mockResolvedValueOnce([
+        { id: 'commission-1', status: 'PAID' },
+        { id: 'commission-2', status: 'PAID' },
+      ]);
+    db.financialTransaction.create.mockResolvedValue({ id: 'transaction-1', amount: 30 });
+    db.commission.updateMany.mockResolvedValue({ count: 2 });
+    db.auditLog.create.mockResolvedValue({ id: 'audit-1' });
+
+    const result = await service.payCommissions({
+      commissionIds: ['commission-1', 'commission-2'],
+      method: 'PIX',
+      notes: 'Fechamento',
+    });
+
+    expect(db.financialTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        barbershopId: 'shop-1',
+        type: 'EXPENSE',
+        category: 'Comissões',
+        amount: 30,
+        method: 'PIX',
+      }),
+    });
+    expect(db.commission.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          id: { in: ['commission-1', 'commission-2'] },
+          status: 'PENDING',
+        }),
+        data: expect.objectContaining({
+          status: 'PAID',
+          paidById: 'user-1',
+          financialTransactionId: 'transaction-1',
+        }),
+      }),
+    );
+    expect(db.auditLog.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ action: 'COMMISSIONS_PAID', entity: 'Commission' }),
+    });
+    expect(result.commissions).toHaveLength(2);
   });
 
   it.each([
@@ -93,6 +234,286 @@ describe('DataService tenant isolation', () => {
         where: expect.objectContaining({ barbershopId: 'shop-1' }),
       }),
     );
+  });
+
+  it('cadastra serviço no tenant autenticado e normaliza textos opcionais', async () => {
+    db.service.create.mockResolvedValue({ id: 'service-1' });
+
+    await service.createService({
+      name: '  Corte degradê  ',
+      description: '  Corte com acabamento  ',
+      price: 55.9,
+      durationMinutes: 45,
+      commissionPercent: 40,
+    });
+
+    expect(db.service.create).toHaveBeenCalledWith({
+      data: {
+        barbershopId: 'shop-1',
+        name: 'Corte degradê',
+        description: 'Corte com acabamento',
+        categoryId: null,
+        price: 55.9,
+        durationMinutes: 45,
+        commissionPercent: 40,
+        commissionFixed: null,
+      },
+      include: { category: true, _count: { select: { employeeServices: true } } },
+    });
+  });
+
+  it('rejeita nome de serviço composto apenas por espaços', async () => {
+    await expect(
+      service.createService({ name: '   ', price: 30, durationMinutes: 30 }),
+    ).rejects.toThrow('Informe um nome válido para o serviço');
+    expect(db.service.create).not.toHaveBeenCalled();
+  });
+
+  it('rejeita comissão percentual e fixa simultâneas', async () => {
+    await expect(
+      service.createService({
+        name: 'Corte',
+        price: 40,
+        durationMinutes: 30,
+        commissionPercent: 50,
+        commissionFixed: 20,
+      }),
+    ).rejects.toThrow('Informe comissão percentual ou fixa, nunca ambas');
+    expect(db.service.create).not.toHaveBeenCalled();
+  });
+
+  it('não edita nem altera status de serviço de outro tenant', async () => {
+    db.service.findFirst.mockResolvedValue(null);
+
+    await expect(service.updateService('service-other', { name: 'Invadido' })).rejects.toThrow(
+      'Serviço não encontrado',
+    );
+    await expect(service.setServiceStatus('service-other', false)).rejects.toThrow(
+      'Serviço não encontrado',
+    );
+    expect(db.service.update).not.toHaveBeenCalled();
+  });
+
+  it('vincula somente profissional e serviço do tenant autenticado', async () => {
+    db.service.findFirst.mockResolvedValue({
+      id: 'service-1',
+      commissionPercent: 40,
+      commissionFixed: null,
+    });
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.employeeService.upsert.mockResolvedValue({ id: 'link-1' });
+
+    await service.configureServiceProfessional('service-1', 'employee-1', {
+      commissionFixed: 25,
+    });
+
+    expect(db.employeeService.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { employeeId_serviceId: { employeeId: 'employee-1', serviceId: 'service-1' } },
+        create: expect.objectContaining({ barbershopId: 'shop-1', commissionFixed: 25 }),
+      }),
+    );
+  });
+
+  it.each([
+    [
+      'PROFESSIONAL',
+      { commissionPercent: 35, commissionFixed: null },
+      { commissionPercent: 40, commissionFixed: null },
+      { type: 'PERCENT', value: 35, source: 'PROFESSIONAL' },
+    ],
+    [
+      'SERVICE',
+      { commissionPercent: null, commissionFixed: null },
+      { commissionPercent: null, commissionFixed: 18 },
+      { type: 'FIXED', value: 18, source: 'SERVICE' },
+    ],
+    [
+      'EMPLOYEE',
+      { commissionPercent: null, commissionFixed: null },
+      { commissionPercent: null, commissionFixed: null },
+      { type: 'PERCENT', value: 22, source: 'EMPLOYEE' },
+    ],
+  ])('aplica prioridade de comissão %s', async (_, specific, base, expected) => {
+    db.service.findFirst.mockResolvedValue({
+      id: 'service-1',
+      ...base,
+      employeeServices: [specific],
+    });
+    db.employee.findFirst.mockResolvedValue({ defaultCommission: 22 });
+
+    await expect(service.serviceCommissionRule('service-1', 'employee-1')).resolves.toEqual(
+      expected,
+    );
+  });
+
+  it('cadastra produto normalizando identificadores no tenant autenticado', async () => {
+    db.product.findFirst.mockResolvedValue(null);
+    db.product.create.mockResolvedValue({ id: 'product-1' });
+
+    await service.createProduct({
+      name: '  Pomada modeladora  ',
+      description: '  Efeito seco  ',
+      sku: '  POM-01  ',
+      barcode: '  789123  ',
+      costPrice: 15,
+      salePrice: 35,
+      minimumStock: 5,
+      commissionPercent: 10,
+    });
+
+    expect(db.product.create).toHaveBeenCalledWith({
+      data: {
+        barbershopId: 'shop-1',
+        name: 'Pomada modeladora',
+        description: 'Efeito seco',
+        categoryId: null,
+        sku: 'POM-01',
+        barcode: '789123',
+        costPrice: 15,
+        salePrice: 35,
+        minimumStock: 5,
+        commissionPercent: 10,
+      },
+      include: { category: true },
+    });
+  });
+
+  it.each([
+    [{ sku: 'SKU-1', barcode: null }, 'Já existe um produto com este SKU'],
+    [{ sku: null, barcode: '789' }, 'Já existe um produto com este código de barras'],
+  ])('rejeita SKU e código de barras duplicados por tenant', async (duplicate, message) => {
+    db.product.findFirst.mockResolvedValue(duplicate);
+    await expect(
+      service.createProduct({
+        name: 'Produto',
+        sku: duplicate.sku,
+        barcode: duplicate.barcode,
+        costPrice: 10,
+        salePrice: 20,
+        minimumStock: 0,
+      }),
+    ).rejects.toThrow(message);
+    expect(db.product.create).not.toHaveBeenCalled();
+  });
+
+  it('registra perda e decrementa estoque atomicamente', async () => {
+    db.product.findFirst.mockResolvedValue({ id: 'product-1' });
+    db.product.updateMany.mockResolvedValue({ count: 1 });
+    db.inventoryMovement.create.mockResolvedValue({ id: 'movement-1' });
+    db.product.findUniqueOrThrow.mockResolvedValue({ id: 'product-1', stockQuantity: 3 });
+
+    await service.createInventoryMovement('product-1', {
+      type: 'LOSS',
+      quantity: 2,
+      reason: 'Avaria',
+    } as any);
+
+    expect(db.product.updateMany).toHaveBeenCalledWith({
+      where: { id: 'product-1', barbershopId: 'shop-1', stockQuantity: { gte: 2 } },
+      data: { stockQuantity: { increment: -2 } },
+    });
+    expect(db.inventoryMovement.create).toHaveBeenCalledWith({
+      data: {
+        barbershopId: 'shop-1',
+        productId: 'product-1',
+        userId: 'user-1',
+        type: 'LOSS',
+        quantity: -2,
+        reason: 'Avaria',
+      },
+      include: { user: { select: { id: true, name: true } } },
+    });
+  });
+
+  it('impede estoque negativo quando a atualização atômica não encontra saldo', async () => {
+    db.product.findFirst.mockResolvedValue({ id: 'product-1' });
+    db.product.updateMany.mockResolvedValue({ count: 0 });
+
+    await expect(
+      service.createInventoryMovement('product-1', {
+        type: 'LOSS',
+        quantity: 10,
+        reason: 'Avaria',
+      } as any),
+    ).rejects.toThrow('Estoque insuficiente para a movimentação');
+    expect(db.inventoryMovement.create).not.toHaveBeenCalled();
+  });
+
+  it('cria agendamento com múltiplos serviços calculando duração e preço', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1' });
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.service.findMany.mockResolvedValue([
+      { id: 'service-1', price: 40, durationMinutes: 30 },
+      { id: 'service-2', price: 25, durationMinutes: 20 },
+    ]);
+    db.appointment.create.mockResolvedValue({ id: 'appointment-1' });
+
+    await service.createAppointment({
+      customerId: 'customer-1',
+      employeeId: 'employee-1',
+      serviceIds: ['service-1', 'service-2'],
+      startAt: '2030-01-07T11:00:00.000Z',
+      notes: '  Preferência pela manhã  ',
+    });
+
+    expect(availability.assertEmployeeAvailable).toHaveBeenCalledWith(
+      'employee-1',
+      new Date('2030-01-07T11:00:00.000Z'),
+      50,
+    );
+    expect(db.appointment.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          barbershopId: 'shop-1',
+          customerId: 'customer-1',
+          employeeId: 'employee-1',
+          endAt: new Date('2030-01-07T11:50:00.000Z'),
+          price: 65,
+          notes: 'Preferência pela manhã',
+          services: {
+            create: [
+              {
+                barbershopId: 'shop-1',
+                serviceId: 'service-1',
+                price: 40,
+                durationMinutes: 30,
+              },
+              {
+                barbershopId: 'shop-1',
+                serviceId: 'service-2',
+                price: 25,
+                durationMinutes: 20,
+              },
+            ],
+          },
+        }),
+      }),
+    );
+  });
+
+  it('rejeita serviço não habilitado para o profissional', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1' });
+    db.employee.findFirst.mockResolvedValue({ id: 'employee-1' });
+    db.service.findMany.mockResolvedValue([]);
+
+    await expect(
+      service.createAppointment({
+        customerId: 'customer-1',
+        employeeId: 'employee-1',
+        serviceIds: ['service-other'],
+        startAt: '2030-01-07T11:00:00.000Z',
+      }),
+    ).rejects.toThrow('Um ou mais serviços não estão habilitados para o profissional');
+    expect(db.appointment.create).not.toHaveBeenCalled();
+  });
+
+  it('não confirma agendamento de outro tenant', async () => {
+    db.appointment.findFirst.mockResolvedValue(null);
+    await expect(service.confirmAppointment('appointment-other')).rejects.toThrow(
+      'Agendamento não encontrado',
+    );
+    expect(db.appointment.update).not.toHaveBeenCalled();
   });
 
   it('cadastra cliente com telefone e WhatsApp normalizados', async () => {
@@ -322,6 +743,7 @@ describe('DataService tenant isolation', () => {
         where: {
           barbershopId: 'shop-1',
           customerId: 'customer-1',
+          status: 'COMPLETED',
           items: { some: { productId: { not: null } } },
         },
       }),
@@ -347,7 +769,7 @@ describe('DataService tenant isolation', () => {
       lastVisit: new Date('2026-09-10T12:00:00.000Z'),
     });
     expect(db.sale.aggregate).toHaveBeenCalledWith({
-      where: { barbershopId: 'shop-1', customerId: 'customer-1' },
+      where: { barbershopId: 'shop-1', customerId: 'customer-1', status: 'COMPLETED' },
       _sum: { total: true },
     });
   });
@@ -380,7 +802,10 @@ describe('DataService tenant isolation', () => {
   });
 
   it('isola a agenda pelo tenant', async () => {
-    await service.appointments();
+    await service.appointments({
+      start: '2030-01-01T00:00:00.000Z',
+      end: '2030-02-01T00:00:00.000Z',
+    });
 
     expect(db.appointment.findMany).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1057,6 +1482,391 @@ describe('DataService tenant isolation', () => {
       select: { id: true },
     });
     expect(db.employeeUnavailability.delete).toHaveBeenCalledWith({ where: { id: 'day-off-1' } });
+  });
+
+  it('abre caixa com saldo inicial e registra auditoria no tenant', async () => {
+    db.setting.findUnique.mockResolvedValue({ allowMultipleOpenCashRegisters: false });
+    db.cashRegister.findFirst.mockResolvedValue(null);
+    db.cashRegister.create.mockResolvedValue({
+      id: 'cash-1',
+      barbershopId: 'shop-1',
+      openingBalance: 150.25,
+      openedBy: { id: 'user-1', name: 'Admin' },
+    });
+
+    await service.openCashRegister({ openingBalance: 150.25 });
+
+    expect(db.cashRegister.findFirst).toHaveBeenCalledWith({
+      where: { barbershopId: 'shop-1', closedAt: null },
+      select: { id: true },
+    });
+    expect(db.cashRegister.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: {
+          barbershopId: 'shop-1',
+          openedById: 'user-1',
+          openingBalance: 150.25,
+        },
+      }),
+    );
+    expect(db.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'CASH_REGISTER_OPENED' }),
+      }),
+    );
+  });
+
+  it('impede segundo caixa quando a configuração não permite', async () => {
+    db.setting.findUnique.mockResolvedValue({ allowMultipleOpenCashRegisters: false });
+    db.cashRegister.findFirst.mockResolvedValue({ id: 'cash-open' });
+
+    await expect(service.openCashRegister({ openingBalance: 0 })).rejects.toThrow(
+      'Já existe um caixa aberto',
+    );
+    expect(db.cashRegister.create).not.toHaveBeenCalled();
+  });
+
+  it('registra entrada manual somente em caixa aberto do tenant', async () => {
+    db.cashRegister.findFirst.mockResolvedValue({ id: 'cash-1' });
+    db.financialTransaction.create.mockResolvedValue({
+      id: 'transaction-1',
+      type: 'INCOME',
+      category: 'Reforço',
+      description: 'Troco',
+      amount: 50,
+      method: 'CASH',
+      status: 'PAID',
+    });
+
+    await service.createFinancialTransaction('cash-1', {
+      type: 'INCOME',
+      category: ' Reforço ',
+      description: ' Troco ',
+      amount: 50,
+      method: 'CASH',
+    } as any);
+
+    expect(db.cashRegister.findFirst).toHaveBeenCalledWith({
+      where: { id: 'cash-1', barbershopId: 'shop-1', closedAt: null },
+      select: { id: true },
+    });
+    expect(db.financialTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        barbershopId: 'shop-1',
+        cashRegisterId: 'cash-1',
+        origin: 'MANUAL',
+        category: 'Reforço',
+        amount: 50,
+      }),
+    });
+  });
+
+  it('cancela apenas lançamento manual pago de caixa aberto e audita', async () => {
+    const transaction = {
+      id: 'transaction-1',
+      type: 'EXPENSE',
+      category: 'Despesa',
+      description: 'Material',
+      amount: 25,
+      method: 'PIX',
+      status: 'PAID',
+      notes: null,
+    };
+    db.financialTransaction.findFirst.mockResolvedValue(transaction);
+    db.financialTransaction.update.mockResolvedValue({ ...transaction, status: 'CANCELLED' });
+
+    await service.cancelFinancialTransaction('transaction-1', { reason: 'Duplicado' });
+
+    expect(db.financialTransaction.findFirst).toHaveBeenCalledWith({
+      where: {
+        id: 'transaction-1',
+        barbershopId: 'shop-1',
+        origin: 'MANUAL',
+        status: 'PAID',
+        cashRegister: { closedAt: null },
+      },
+    });
+    expect(db.financialTransaction.update).toHaveBeenCalledWith({
+      where: { id: 'transaction-1' },
+      data: expect.objectContaining({
+        status: 'CANCELLED',
+        cancelledById: 'user-1',
+        cancellationReason: 'Duplicado',
+      }),
+    });
+    expect(db.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'FINANCIAL_TRANSACTION_CANCELLED' }),
+      }),
+    );
+  });
+
+  it('fecha caixa consolidando entradas, saídas e diferença', async () => {
+    db.cashRegister.findFirst.mockResolvedValue({
+      id: 'cash-1',
+      barbershopId: 'shop-1',
+      openingBalance: 100,
+      openedAt: new Date('2026-09-28T10:00:00.000Z'),
+      closedAt: null,
+    });
+    db.financialTransaction.findMany.mockResolvedValue([
+      { type: 'INCOME', amount: 80, method: 'PIX' },
+      { type: 'EXPENSE', amount: 20, method: 'CASH' },
+    ]);
+    db.cashRegister.update.mockResolvedValue({ id: 'cash-1', closingBalance: 155 });
+
+    const result = await service.closeCashRegister('cash-1', {
+      closingBalance: 155,
+      notes: 'Conferido',
+    });
+
+    expect(result.summary).toEqual(
+      expect.objectContaining({ income: 80, expense: 20, expectedBalance: 160 }),
+    );
+    expect(db.cashRegister.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 'cash-1' },
+        data: expect.objectContaining({
+          closingBalance: 155,
+          expectedBalance: 160,
+          difference: -5,
+          closedById: 'user-1',
+        }),
+      }),
+    );
+  });
+
+  it('impede fechamento duplicado do caixa', async () => {
+    db.cashRegister.findFirst.mockResolvedValue({
+      id: 'cash-1',
+      barbershopId: 'shop-1',
+      openingBalance: 0,
+      closedAt: new Date(),
+    });
+
+    await expect(service.closeCashRegister('cash-1', { closingBalance: 0 })).rejects.toThrow(
+      'Este caixa já foi fechado',
+    );
+    expect(db.cashRegister.update).not.toHaveBeenCalled();
+  });
+
+  it('cadastra fornecedor normalizando documento e isolando pelo tenant', async () => {
+    db.supplier.findFirst.mockResolvedValue(null);
+    db.supplier.create.mockResolvedValue({ id: 'supplier-1' });
+
+    await service.createSupplier({
+      name: ' Fornecedor Modelo ',
+      document: '12.345.678/0001-99',
+      phone: '(11) 99999-0000',
+    });
+
+    expect(db.supplier.findFirst).toHaveBeenCalledWith({
+      where: { barbershopId: 'shop-1', document: '12345678000199' },
+      select: { id: true },
+    });
+    expect(db.supplier.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        barbershopId: 'shop-1',
+        name: 'Fornecedor Modelo',
+        document: '12345678000199',
+        phone: '11999990000',
+      }),
+    });
+  });
+
+  it('cria conta a receber somente para cliente e categoria do tenant', async () => {
+    db.customer.findFirst.mockResolvedValue({ id: 'customer-1' });
+    db.financialCategory.findFirst.mockResolvedValue({ id: 'category-1' });
+    db.accountReceivable.create.mockResolvedValue({ id: 'receivable-1' });
+
+    await service.createAccountReceivable({
+      customerId: 'customer-1',
+      categoryId: 'category-1',
+      description: 'Mensalidade',
+      amount: 120,
+      dueDate: '2026-10-10',
+    });
+
+    expect(db.customer.findFirst).toHaveBeenCalledWith({
+      where: { id: 'customer-1', barbershopId: 'shop-1', deletedAt: null },
+      select: { id: true },
+    });
+    expect(db.financialCategory.findFirst).toHaveBeenCalledWith({
+      where: { id: 'category-1', barbershopId: 'shop-1', type: 'INCOME', active: true },
+      select: { id: true },
+    });
+    expect(db.accountReceivable.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          barbershopId: 'shop-1',
+          customerId: 'customer-1',
+          amount: 120,
+          dueDate: new Date('2026-10-10T00:00:00.000Z'),
+        }),
+      }),
+    );
+  });
+
+  it('calcula conta vencida, totais e alertas sem alterar o status persistido', async () => {
+    const past = new Date('2020-01-01T00:00:00.000Z');
+    const item = {
+      id: 'payable-1',
+      amount: 75,
+      status: 'PENDING',
+      dueDate: past,
+      supplier: null,
+      category: null,
+      paidBy: null,
+    };
+    db.accountPayable.findMany
+      .mockResolvedValueOnce([item])
+      .mockResolvedValueOnce([{ amount: 75, status: 'PENDING', dueDate: past }]);
+    db.accountPayable.count.mockResolvedValue(1);
+
+    const result = await service.accountPayables();
+
+    expect(result.items[0]).toEqual(expect.objectContaining({ effectiveStatus: 'OVERDUE' }));
+    expect(result.summary).toEqual(expect.objectContaining({ pending: 75, overdue: 75 }));
+    expect(result.alerts.overdue).toBe(1);
+    expect(db.accountPayable.findMany.mock.calls[0][0].where).toEqual(
+      expect.objectContaining({ barbershopId: 'shop-1' }),
+    );
+  });
+
+  it('baixa conta a pagar criando saída financeira e auditoria', async () => {
+    db.accountPayable.findFirst.mockResolvedValue({
+      id: 'payable-1',
+      status: 'PENDING',
+      amount: 250,
+      dueDate: new Date('2026-10-10T00:00:00.000Z'),
+      description: 'Aluguel',
+      notes: null,
+      category: { name: 'Estrutura' },
+    });
+    db.cashRegister.findFirst.mockResolvedValue({ id: 'cash-1' });
+    db.financialTransaction.create.mockResolvedValue({ id: 'transaction-1' });
+    db.accountPayable.update.mockResolvedValue({ id: 'payable-1', status: 'PAID' });
+
+    await service.settleAccountPayable('payable-1', { method: 'PIX' } as any);
+
+    expect(db.accountPayable.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { id: 'payable-1', barbershopId: 'shop-1' } }),
+    );
+    expect(db.financialTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        barbershopId: 'shop-1',
+        cashRegisterId: 'cash-1',
+        type: 'EXPENSE',
+        origin: 'ACCOUNT_PAYABLE',
+        category: 'Estrutura',
+        amount: 250,
+      }),
+    });
+    expect(db.accountPayable.update).toHaveBeenCalledWith({
+      where: { id: 'payable-1' },
+      data: expect.objectContaining({
+        status: 'PAID',
+        paidById: 'user-1',
+        financialTransactionId: 'transaction-1',
+      }),
+    });
+    expect(db.auditLog.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ action: 'ACCOUNT_PAYABLE_PAID' }),
+      }),
+    );
+  });
+
+  it('baixa conta a receber criando entrada financeira', async () => {
+    db.accountReceivable.findFirst.mockResolvedValue({
+      id: 'receivable-1',
+      status: 'PENDING',
+      amount: 90,
+      dueDate: new Date('2026-10-10T00:00:00.000Z'),
+      description: 'Crédito do cliente',
+      notes: null,
+      category: null,
+    });
+    db.cashRegister.findFirst.mockResolvedValue(null);
+    db.financialTransaction.create.mockResolvedValue({ id: 'transaction-2' });
+
+    await service.settleAccountReceivable('receivable-1', { method: 'CASH' } as any);
+
+    expect(db.financialTransaction.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: 'INCOME',
+        origin: 'ACCOUNT_RECEIVABLE',
+        amount: 90,
+      }),
+    });
+    expect(db.accountReceivable.update).toHaveBeenCalledWith({
+      where: { id: 'receivable-1' },
+      data: expect.objectContaining({
+        status: 'PAID',
+        receivedById: 'user-1',
+        financialTransactionId: 'transaction-2',
+      }),
+    });
+  });
+
+  it('cria recorrência e primeira despesa com chave de idempotência', async () => {
+    db.expenseRecurrence.create.mockResolvedValue({ id: 'recurrence-1' });
+    db.accountPayable.create.mockResolvedValue({ id: 'payable-1' });
+
+    await service.createExpenseRecurrence({
+      description: 'Internet',
+      amount: 120,
+      dueDate: '2026-10-10',
+      frequency: 'MONTHLY',
+      intervalCount: 1,
+    } as any);
+
+    expect(db.expenseRecurrence.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        barbershopId: 'shop-1',
+        nextDueDate: new Date('2026-11-10T00:00:00.000Z'),
+      }),
+    });
+    expect(db.accountPayable.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        recurrenceId: 'recurrence-1',
+        recurrenceDueDate: new Date('2026-10-10T00:00:00.000Z'),
+        dueDate: new Date('2026-10-10T00:00:00.000Z'),
+      }),
+    });
+  });
+
+  it('ajusta recorrência mensal ao último dia de meses mais curtos', async () => {
+    db.expenseRecurrence.create.mockResolvedValue({ id: 'recurrence-2' });
+    db.accountPayable.create.mockResolvedValue({ id: 'payable-2' });
+
+    await service.createExpenseRecurrence({
+      description: 'Licença',
+      amount: 80,
+      dueDate: '2027-01-31',
+      frequency: 'MONTHLY',
+      intervalCount: 1,
+    } as any);
+
+    expect(db.expenseRecurrence.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({ nextDueDate: new Date('2027-02-28T00:00:00.000Z') }),
+    });
+  });
+
+  it('impede baixa duplicada de conta já paga', async () => {
+    db.accountPayable.findFirst.mockResolvedValue({
+      id: 'payable-1',
+      status: 'PAID',
+      amount: 20,
+      dueDate: new Date(),
+      description: 'Conta',
+      category: null,
+    });
+
+    await expect(
+      service.settleAccountPayable('payable-1', { method: 'PIX' } as any),
+    ).rejects.toThrow('Somente contas pendentes podem ser baixadas');
+    expect(db.financialTransaction.create).not.toHaveBeenCalled();
   });
 
   it('aplica o tenant em todas as consultas do dashboard', async () => {

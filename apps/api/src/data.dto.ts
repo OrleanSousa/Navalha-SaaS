@@ -1,6 +1,15 @@
 import { Type } from 'class-transformer';
 import { PartialType } from '@nestjs/swagger';
-import { Role } from '@prisma/client';
+import {
+  AppointmentStatus,
+  CommissionStatus,
+  FinancialCategoryType,
+  FinancialType,
+  MovementType,
+  PaymentMethod,
+  Role,
+  RecurrenceFrequency,
+} from '@prisma/client';
 import {
   IsDateString,
   IsBoolean,
@@ -16,7 +25,10 @@ import {
   MaxLength,
   Min,
   MinLength,
+  NotEquals,
   ArrayUnique,
+  ArrayMinSize,
+  ValidateNested,
 } from 'class-validator';
 
 export enum EmployeeStatusFilter {
@@ -122,6 +134,593 @@ export class UpdateCustomerDuplicatePolicyDto {
 
   @IsBoolean()
   allowDuplicateCpf: boolean;
+}
+
+export class CreateServiceDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  categoryId?: string | null;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(99999999.99)
+  price: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(1440)
+  durationMinutes: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  commissionPercent?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99999999.99)
+  commissionFixed?: number | null;
+}
+
+export class UpdateServiceDto extends PartialType(CreateServiceDto) {}
+
+export class SetServiceStatusDto {
+  @IsBoolean()
+  active: boolean;
+}
+
+export class CreateServiceCategoryDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  name: string;
+}
+
+export class ConfigureServiceProfessionalDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  commissionPercent?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99999999.99)
+  commissionFixed?: number | null;
+}
+
+export class CreateProductDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name: string;
+
+  @IsOptional() @IsString() @MaxLength(1000) description?: string;
+  @IsOptional() @IsString() categoryId?: string | null;
+  @IsOptional() @IsString() @MaxLength(80) sku?: string | null;
+  @IsOptional() @IsString() @MaxLength(80) barcode?: string | null;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99999999.99)
+  costPrice: number;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(99999999.99)
+  salePrice: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @Max(999999999)
+  minimumStock = 0;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(100)
+  commissionPercent?: number | null;
+}
+
+export class UpdateProductDto extends PartialType(CreateProductDto) {
+  constructor() {
+    super();
+    this.minimumStock = undefined;
+  }
+}
+
+export class SetProductStatusDto {
+  @IsBoolean()
+  active: boolean;
+}
+
+export class CreateProductCategoryDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  name: string;
+}
+
+export class CreateInventoryMovementDto {
+  @IsEnum(MovementType)
+  type: MovementType;
+
+  @Type(() => Number)
+  @IsInt()
+  @NotEquals(0)
+  @Min(-999999999)
+  @Max(999999999)
+  quantity: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  reason?: string;
+}
+
+export class UpdateStockSettingsDto {
+  @IsBoolean()
+  allowNegativeStock: boolean;
+}
+
+export class CreateAppointmentDto {
+  @IsString()
+  customerId: string;
+
+  @IsString()
+  employeeId: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  serviceIds: string[];
+
+  @IsDateString()
+  startAt: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  notes?: string | null;
+}
+
+export class UpdateAppointmentDto extends PartialType(CreateAppointmentDto) {}
+
+export class AppointmentSlotsDto {
+  @IsOptional()
+  @IsString()
+  appointmentId?: string;
+
+  @IsString()
+  employeeId: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  serviceIds: string[];
+
+  @Matches(/^\d{4}-\d{2}-\d{2}$/)
+  date: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(5)
+  @Max(120)
+  stepMinutes = 15;
+}
+
+export class ListAppointmentsQuery {
+  @IsDateString()
+  start: string;
+
+  @IsDateString()
+  end: string;
+
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
+  @IsOptional()
+  @IsEnum(AppointmentStatus)
+  status?: AppointmentStatus;
+}
+
+export class CancelAppointmentDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(300)
+  reason: string;
+}
+
+export class CreateWalkInSaleDto {
+  @IsOptional()
+  @IsString()
+  customerId?: string | null;
+
+  @IsString()
+  employeeId: string;
+}
+
+export class AddSaleServiceItemDto {
+  @IsString()
+  serviceId: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  quantity = 1;
+}
+
+export class AddSaleProductItemDto {
+  @IsString()
+  productId: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(999999)
+  quantity = 1;
+}
+
+export class ApplySaleDiscountDto {
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99999999.99)
+  amount: number;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(300)
+  reason: string;
+}
+
+export class SalePaymentDto {
+  @IsEnum(PaymentMethod)
+  method: PaymentMethod;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(99999999.99)
+  amount: number;
+}
+
+export class FinalizeSaleDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ValidateNested({ each: true })
+  @Type(() => SalePaymentDto)
+  payments: SalePaymentDto[];
+}
+
+export class ListCommissionsQuery {
+  @IsOptional()
+  @IsString()
+  employeeId?: string;
+
+  @IsOptional()
+  @IsEnum(CommissionStatus)
+  status?: CommissionStatus;
+
+  @IsOptional()
+  @IsDateString()
+  start?: string;
+
+  @IsOptional()
+  @IsDateString()
+  end?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 25;
+}
+
+export class AdjustCommissionDto {
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99999999.99)
+  amount: number;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(300)
+  reason: string;
+}
+
+export class PayCommissionsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayUnique()
+  @IsString({ each: true })
+  commissionIds: string[];
+
+  @IsEnum(PaymentMethod)
+  method: PaymentMethod;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+}
+
+export class PayCommissionDto {
+  @IsEnum(PaymentMethod)
+  method: PaymentMethod;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+}
+
+export class OpenCashRegisterDto {
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99999999.99)
+  openingBalance: number;
+}
+
+export class CloseCashRegisterDto {
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  @Max(99999999.99)
+  closingBalance: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+}
+
+export class CreateFinancialTransactionDto {
+  @IsEnum(FinancialType)
+  type: FinancialType;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  category: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  description: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(99999999.99)
+  amount: number;
+
+  @IsEnum(PaymentMethod)
+  method: PaymentMethod;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+}
+
+export class UpdateFinancialTransactionDto extends PartialType(CreateFinancialTransactionDto) {}
+
+export class CancelFinancialTransactionDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(300)
+  reason: string;
+}
+
+export class ListCashRegistersQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(50)
+  limit = 10;
+}
+
+export class CreateSupplierDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(120)
+  name: string;
+
+  @IsOptional() @IsString() @MaxLength(30) document?: string;
+  @IsOptional() @IsString() @MaxLength(120) contactName?: string;
+  @IsOptional() @IsString() @MaxLength(30) phone?: string;
+  @IsOptional() @IsEmail() @MaxLength(160) email?: string;
+  @IsOptional() @IsString() @MaxLength(500) notes?: string;
+}
+
+export class UpdateSupplierDto extends PartialType(CreateSupplierDto) {}
+
+export class SetSupplierStatusDto {
+  @IsBoolean()
+  active: boolean;
+}
+
+export class CreateFinancialCategoryDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(80)
+  name: string;
+
+  @IsEnum(FinancialCategoryType)
+  type: FinancialCategoryType;
+}
+
+export class UpdateFinancialCategoryDto extends PartialType(CreateFinancialCategoryDto) {}
+
+export class SetFinancialCategoryStatusDto {
+  @IsBoolean()
+  active: boolean;
+}
+
+export class CreateAccountPayableDto {
+  @IsOptional() @IsString() supplierId?: string;
+  @IsOptional() @IsString() categoryId?: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  description: string;
+
+  @IsOptional() @IsString() @MaxLength(80) documentNumber?: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(99999999.99)
+  amount: number;
+
+  @IsDateString()
+  dueDate: string;
+
+  @IsOptional() @IsString() @MaxLength(500) notes?: string;
+}
+
+export class CreateAccountReceivableDto {
+  @IsString()
+  customerId: string;
+
+  @IsOptional() @IsString() categoryId?: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(200)
+  description: string;
+
+  @IsOptional() @IsString() @MaxLength(80) documentNumber?: string;
+
+  @Type(() => Number)
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  @Max(99999999.99)
+  amount: number;
+
+  @IsDateString()
+  dueDate: string;
+
+  @IsOptional() @IsString() @MaxLength(500) notes?: string;
+}
+
+export class SettleAccountDto {
+  @IsEnum(PaymentMethod)
+  method: PaymentMethod;
+
+  @IsOptional()
+  @IsDateString()
+  settledAt?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  notes?: string;
+}
+
+export class CancelAccountDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(300)
+  reason: string;
+}
+
+export class CreateExpenseRecurrenceDto extends CreateAccountPayableDto {
+  @IsEnum(RecurrenceFrequency)
+  frequency: RecurrenceFrequency;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(60)
+  intervalCount = 1;
+
+  @IsOptional()
+  @IsDateString()
+  endDate?: string;
+}
+
+export enum AccountListStatus {
+  ALL = 'ALL',
+  PENDING = 'PENDING',
+  OVERDUE = 'OVERDUE',
+  PAID = 'PAID',
+  CANCELLED = 'CANCELLED',
+}
+
+export class ListAccountsQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page = 1;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit = 20;
+
+  @IsOptional() @IsEnum(AccountListStatus) status = AccountListStatus.ALL;
+  @IsOptional() @IsString() search?: string;
+  @IsOptional() @IsString() categoryId?: string;
+  @IsOptional() @IsString() supplierId?: string;
+  @IsOptional() @IsString() customerId?: string;
+  @IsOptional() @IsDateString() start?: string;
+  @IsOptional() @IsDateString() end?: string;
+}
+
+export class SetExpenseRecurrenceStatusDto {
+  @IsBoolean()
+  active: boolean;
 }
 
 export class ListEmployeesQuery {

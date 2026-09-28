@@ -17,12 +17,37 @@ const permissionCatalog = [
   ['employees.schedule', 'Gerenciar jornada semanal'],
   ['employees.unavailability', 'Gerenciar indisponibilidades'],
   ['services.read', 'Visualizar serviços'],
+  ['services.update', 'Editar serviços'],
+  ['services.status', 'Ativar e inativar serviços'],
+  ['services.categories', 'Gerenciar categorias de serviços'],
+  ['services.professionals', 'Vincular profissionais e comissões aos serviços'],
   ['products.read', 'Visualizar produtos'],
+  ['products.update', 'Editar produtos'],
+  ['products.status', 'Ativar e inativar produtos'],
+  ['products.categories', 'Gerenciar categorias de produtos'],
+  ['products.stock', 'Registrar movimentações de estoque'],
+  ['products.settings', 'Configurar regras de estoque'],
   ['appointments.read', 'Visualizar agenda'],
+  ['appointments.update', 'Editar e reagendar compromissos'],
+  ['appointments.status', 'Alterar status de agendamentos'],
   ['customers.create', 'Cadastrar clientes'],
   ['services.create', 'Cadastrar serviços'],
   ['products.create', 'Cadastrar produtos'],
   ['appointments.create', 'Criar agendamentos'],
+  ['sales.read', 'Visualizar atendimentos e vendas'],
+  ['sales.create', 'Iniciar atendimentos'],
+  ['sales.update', 'Editar itens do atendimento'],
+  ['sales.discount', 'Aplicar descontos em atendimentos'],
+  ['sales.finalize', 'Finalizar vendas e pagamentos'],
+  ['commissions.read', 'Visualizar comissões'],
+  ['commissions.update', 'Ajustar comissões pendentes'],
+  ['commissions.pay', 'Registrar pagamentos de comissões'],
+  ['finance.read', 'Visualizar caixas e lançamentos financeiros'],
+  ['cash-register.manage', 'Abrir e fechar caixas'],
+  ['financial-transactions.manage', 'Criar, editar e cancelar lançamentos manuais'],
+  ['accounts.read', 'Visualizar contas a pagar e receber'],
+  ['accounts.manage', 'Gerenciar fornecedores, categorias e contas'],
+  ['accounts.settle', 'Registrar pagamentos e recebimentos'],
 ] as const;
 async function seedPermissions() {
   const permissions = [];
@@ -46,8 +71,20 @@ async function seedPermissions() {
     'services.read',
     'products.read',
     'appointments.read',
+    'appointments.update',
+    'appointments.status',
     'customers.create',
     'appointments.create',
+    'sales.read',
+    'sales.create',
+    'sales.update',
+    'sales.finalize',
+    'finance.read',
+    'cash-register.manage',
+    'financial-transactions.manage',
+    'accounts.read',
+    'accounts.manage',
+    'accounts.settle',
   ]);
   await db.rolePermission.createMany({
     data: permissions
@@ -62,6 +99,9 @@ async function seedPermissions() {
     'products.read',
     'appointments.read',
     'appointments.create',
+    'sales.read',
+    'sales.create',
+    'sales.update',
   ]);
   await db.rolePermission.createMany({
     data: permissions
@@ -159,6 +199,11 @@ async function main() {
     });
     employees.push(e);
   }
+  const serviceCategory = await db.serviceCategory.upsert({
+    where: { barbershopId_name: { barbershopId: shop.id, name: 'Barbearia' } },
+    update: { active: true },
+    create: { barbershopId: shop.id, name: 'Barbearia' },
+  });
   const services = [];
   for (const s of [
     { name: 'Corte', price: 40, durationMinutes: 30, commissionPercent: 50 },
@@ -167,16 +212,34 @@ async function main() {
     { name: 'Sobrancelha', price: 15, durationMinutes: 15, commissionPercent: 40 },
   ]) {
     let x = await db.service.findFirst({ where: { barbershopId: shop.id, name: s.name } });
-    x ??= await db.service.create({ data: { ...s, barbershopId: shop.id, category: 'Barbearia' } });
+    x ??= await db.service.create({
+      data: { ...s, barbershopId: shop.id, categoryId: serviceCategory.id },
+    });
     services.push(x);
   }
+  for (const employee of employees) {
+    for (const service of services) {
+      await db.employeeService.upsert({
+        where: { employeeId_serviceId: { employeeId: employee.id, serviceId: service.id } },
+        update: {},
+        create: { barbershopId: shop.id, employeeId: employee.id, serviceId: service.id },
+      });
+    }
+  }
+  const productCategory = await db.productCategory.upsert({
+    where: { barbershopId_name: { barbershopId: shop.id, name: 'Cuidados' } },
+    update: { active: true },
+    create: { barbershopId: shop.id, name: 'Cuidados' },
+  });
   for (const p of [
     { name: 'Pomada', salePrice: 35, costPrice: 15, stockQuantity: 4, minimumStock: 5 },
     { name: 'Shampoo', salePrice: 30, costPrice: 12, stockQuantity: 12, minimumStock: 4 },
     { name: 'Balm', salePrice: 25, costPrice: 10, stockQuantity: 8, minimumStock: 3 },
   ]) {
     if (!(await db.product.findFirst({ where: { barbershopId: shop.id, name: p.name } })))
-      await db.product.create({ data: { ...p, barbershopId: shop.id, category: 'Cuidados' } });
+      await db.product.create({
+        data: { ...p, barbershopId: shop.id, categoryId: productCategory.id },
+      });
   }
   const customers = [];
   for (const [i, name] of [
