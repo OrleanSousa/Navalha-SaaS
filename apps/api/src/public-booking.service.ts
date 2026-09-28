@@ -3,17 +3,20 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AvailabilityService } from './availability.service';
 import { CreatePublicAppointmentDto, PublicAvailabilityQuery } from './public-booking.dto';
 import { PrismaService } from './prisma.service';
+import { NotificationsService } from './notifications.service';
 
 @Injectable()
 export class PublicBookingService {
   constructor(
     private readonly db: PrismaService,
     private readonly availabilityService: AvailabilityService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   async page(slug: string) {
@@ -86,7 +89,7 @@ export class PublicBookingService {
     const phone = this.normalizePhone(dto.whatsapp);
 
     try {
-      return await this.db.$transaction(
+      const result = await this.db.$transaction(
         async (tx) => {
           await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`${shop.id}:${dto.employeeId}`}))`;
           const conflict = await tx.appointment.findFirst({
@@ -158,6 +161,16 @@ export class PublicBookingService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
+      void this.notifications
+        ?.appointmentCreated(shop.id, {
+          id: result.appointment.id,
+          customerName: dto.name.trim(),
+          customerWhatsapp: phone,
+          employeeName: result.appointment.employee.name,
+          startAt: result.appointment.startAt,
+        })
+        .catch(() => undefined);
+      return result;
     } catch (error) {
       if (error instanceof ConflictException) throw error;
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {

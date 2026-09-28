@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { Prisma, Role } from '@prisma/client';
 import { mkdir, unlink, writeFile } from 'node:fs/promises';
@@ -77,6 +78,7 @@ import {
   UpdateWorkScheduleDto,
 } from './data.dto';
 import { AvailabilityService } from './availability.service';
+import { NotificationsService } from './notifications.service';
 
 @Injectable()
 export class DataService {
@@ -84,6 +86,7 @@ export class DataService {
     private readonly db: PrismaService,
     private readonly tenant: TenantContext,
     private readonly availability: AvailabilityService,
+    @Optional() private readonly notifications?: NotificationsService,
   ) {}
 
   async customers(query: ListCustomersQuery = new ListCustomersQuery()) {
@@ -1370,7 +1373,7 @@ export class DataService {
     const delta = dto.type === 'LOSS' ? -dto.quantity : dto.quantity;
     const barbershopId = this.tenant.barbershopId;
     try {
-      return await this.db.$transaction(
+      const result = await this.db.$transaction(
         async (tx) => {
           const [product, settings] = await Promise.all([
             tx.product.findFirst({
@@ -1410,6 +1413,8 @@ export class DataService {
         },
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
+      void this.notifications?.syncOperationalAlerts(barbershopId).catch(() => undefined);
+      return result;
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
         throw new ConflictException('O estoque foi alterado por outra operação; tente novamente');
@@ -1540,7 +1545,7 @@ export class DataService {
     );
     const endAt = new Date(startAt.getTime() + details.durationMinutes * 60000);
     try {
-      return await this.db.$transaction(
+      const appointment = await this.db.$transaction(
         (tx) =>
           tx.appointment.create({
             data: {
@@ -1564,6 +1569,16 @@ export class DataService {
           }),
         { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
       );
+      void this.notifications
+        ?.appointmentCreated(this.tenant.barbershopId, {
+          id: appointment.id,
+          customerName: appointment.customer.name,
+          customerWhatsapp: appointment.customer.whatsapp || appointment.customer.phone,
+          employeeName: appointment.employee.name,
+          startAt: appointment.startAt,
+        })
+        .catch(() => undefined);
+      return appointment;
     } catch (error) {
       this.rethrowAppointmentConflict(error);
     }
@@ -1635,7 +1650,7 @@ export class DataService {
     if (!['SCHEDULED', 'CONFIRMED'].includes(appointment.status)) {
       throw new BadRequestException('Este agendamento não pode ser cancelado');
     }
-    return this.db.appointment.update({
+    const updated = await this.db.appointment.update({
       where: { id: appointment.id },
       data: {
         status: 'CANCELLED',
@@ -1644,6 +1659,16 @@ export class DataService {
       },
       include: this.appointmentInclude(),
     });
+    void this.notifications
+      ?.appointmentCancelled(this.tenant.barbershopId, {
+        id: updated.id,
+        customerName: updated.customer.name,
+        customerWhatsapp: updated.customer.whatsapp || updated.customer.phone,
+        employeeName: updated.employee.name,
+        startAt: updated.startAt,
+      })
+      .catch(() => undefined);
+    return updated;
   }
 
   async markAppointmentNoShow(id: string) {

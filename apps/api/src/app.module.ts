@@ -15,6 +15,9 @@ import { PermissionsGuard, RolesGuard } from './rbac';
 import { SuperAdminController, SuperAdminService } from './super-admin';
 import { PublicBookingController } from './public-booking.controller';
 import { PublicBookingService } from './public-booking.service';
+import { NotificationsController } from './notifications.controller';
+import { NotificationsService } from './notifications.service';
+import { LocalMessageProvider, MESSAGE_PROVIDER } from './message-provider';
 
 @Module({
   imports: [
@@ -33,6 +36,7 @@ import { PublicBookingService } from './public-booking.service';
     HealthController,
     SuperAdminController,
     PublicBookingController,
+    NotificationsController,
   ],
   providers: [
     PrismaService,
@@ -45,6 +49,8 @@ import { PublicBookingService } from './public-booking.service';
     PermissionsGuard,
     SuperAdminService,
     PublicBookingService,
+    NotificationsService,
+    { provide: MESSAGE_PROVIDER, useClass: LocalMessageProvider },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

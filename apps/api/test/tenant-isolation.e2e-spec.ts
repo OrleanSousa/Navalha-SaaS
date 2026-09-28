@@ -18,6 +18,9 @@ import { PermissionsGuard, RolesGuard } from '../src/rbac';
 import { SuperAdminController, SuperAdminService } from '../src/super-admin';
 import { PublicBookingController } from '../src/public-booking.controller';
 import { PublicBookingService } from '../src/public-booking.service';
+import { NotificationsController } from '../src/notifications.controller';
+import { NotificationsService } from '../src/notifications.service';
+import { LocalMessageProvider, MESSAGE_PROVIDER } from '../src/message-provider';
 
 describe('Isolamento multi-tenant (e2e)', () => {
   let app: INestApplication;
@@ -48,7 +51,13 @@ describe('Isolamento multi-tenant (e2e)', () => {
           signOptions: { expiresIn: '15m' },
         }),
       ],
-      controllers: [AuthController, DataController, SuperAdminController, PublicBookingController],
+      controllers: [
+        AuthController,
+        DataController,
+        SuperAdminController,
+        PublicBookingController,
+        NotificationsController,
+      ],
       providers: [
         PrismaService,
         AuthService,
@@ -60,6 +69,8 @@ describe('Isolamento multi-tenant (e2e)', () => {
         PermissionsGuard,
         SuperAdminService,
         PublicBookingService,
+        NotificationsService,
+        { provide: MESSAGE_PROVIDER, useClass: LocalMessageProvider },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -343,6 +354,47 @@ describe('Isolamento multi-tenant (e2e)', () => {
         await db.service.deleteMany({ where: { id: serviceId } });
       }
       if (scheduleId) await db.workSchedule.deleteMany({ where: { id: scheduleId } });
+    }
+  });
+
+  it('gera, consulta e marca alertas operacionais como lidos', async () => {
+    const token = await login(`admin-a-${suffix}@example.com`);
+    const product = await db.product.create({
+      data: {
+        barbershopId: shopAId,
+        name: `Produto baixo ${suffix}`,
+        costPrice: 10,
+        salePrice: 20,
+        stockQuantity: 1,
+        minimumStock: 2,
+      },
+    });
+
+    try {
+      const response = await request(app.getHttpServer())
+        .get('/api/notifications')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const alert = response.body.items.find(
+        (item: { type: string; metadata?: { productId?: string } }) =>
+          item.type === 'LOW_STOCK' && item.metadata?.productId === product.id,
+      );
+      expect(alert).toBeDefined();
+
+      await request(app.getHttpServer())
+        .patch(`/api/notifications/${alert.id}/read`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      const count = await request(app.getHttpServer())
+        .get('/api/notifications/unread-count')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(count.body.count).toBeGreaterThanOrEqual(0);
+    } finally {
+      await db.notification.deleteMany({
+        where: { barbershopId: shopAId, dedupKey: `stock:low:${product.id}` },
+      });
+      await db.product.delete({ where: { id: product.id } });
     }
   });
 
@@ -928,6 +980,24 @@ describe('Isolamento multi-tenant (e2e)', () => {
         .expect(201);
       expect(cancelled.body.status).toBe('CANCELLED');
       expect(cancelled.body.cancellationReason).toBe('Cliente solicitou');
+      let appointmentNotifications = 0;
+      for (let attempt = 0; attempt < 20 && appointmentNotifications < 2; attempt += 1) {
+        appointmentNotifications = await db.notification.count({
+          where: {
+            barbershopId: shopAId,
+            dedupKey: {
+              in: [
+                `appointment:created:${created.body.id}`,
+                `appointment:cancelled:${created.body.id}`,
+              ],
+            },
+          },
+        });
+        if (appointmentNotifications < 2) {
+          await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+      }
+      expect(appointmentNotifications).toBe(2);
 
       const noShow = await request(app.getHttpServer())
         .post('/api/appointments')

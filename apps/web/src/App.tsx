@@ -18,6 +18,7 @@ import { Accounts } from './pages/Accounts';
 import { Reports } from './pages/Reports';
 import { Settings } from './pages/Settings';
 import { PublicBooking } from './pages/PublicBooking';
+import { Notifications } from './pages/Notifications';
 import { Placeholder } from './pages/Placeholder';
 import { useAuth } from './lib/auth';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="contas" element={<Accounts />} />
         <Route path="relatorios" element={<Reports />} />
         <Route path="configuracoes" element={<Settings />} />
+        <Route path="notificacoes" element={<Notifications />} />
         <Route path="colaboradores" element={<Employees />} />
         <Route path="colaboradores/:id" element={<EmployeeDetails />} />
         <Route path=":page" element={<Placeholder />} />

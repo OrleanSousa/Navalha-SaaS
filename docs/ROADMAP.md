@@ -308,16 +308,16 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Etapa 17 — Notificações e integração futura
 
-- [ ] 17.1 Criar central de notificações real
-- [ ] 17.2 Notificar novo agendamento e cancelamento
-- [ ] 17.3 Notificar estoque baixo
-- [ ] 17.4 Notificar conta vencendo
-- [ ] 17.5 Notificar caixa não fechado
-- [ ] 17.6 Notificar comissão pendente
-- [ ] 17.7 Criar interface `MessageProvider`
-- [ ] 17.8 Criar provedor local/log para desenvolvimento
-- [ ] 17.9 Preparar templates de WhatsApp sem contratar API
-- [ ] 17.10 Criar processamento assíncrono/fila para mensagens
+- [x] 17.1 Criar central de notificações real
+- [x] 17.2 Notificar novo agendamento e cancelamento
+- [x] 17.3 Notificar estoque baixo
+- [x] 17.4 Notificar conta vencendo
+- [x] 17.5 Notificar caixa não fechado
+- [x] 17.6 Notificar comissão pendente
+- [x] 17.7 Criar interface `MessageProvider`
+- [x] 17.8 Criar provedor local/log para desenvolvimento
+- [x] 17.9 Preparar templates de WhatsApp sem contratar API
+- [x] 17.10 Criar processamento assíncrono/fila para mensagens
 
 ## Etapa 18 — Auditoria, observabilidade e backup
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Iniciar a **Etapa 15** com a edição dos dados e da identidade da barbearia (item 15.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Iniciar a **Etapa 18** pela centralização da auditoria (item 18.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. Mensagens externas continuam desacopladas pela interface `MessageProvider`; em desenvolvimento, o provedor local registra os envios sem contratar uma API.

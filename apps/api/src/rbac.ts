@@ -61,6 +61,8 @@ export const Permissions = {
   REPORTS_READ: 'reports.read',
   SETTINGS_READ: 'settings.read',
   SETTINGS_MANAGE: 'settings.manage',
+  NOTIFICATIONS_READ: 'notifications.read',
+  NOTIFICATIONS_MANAGE: 'notifications.manage',
 } as const;
 
 export type PermissionKey = (typeof Permissions)[keyof typeof Permissions];
@@ -127,6 +129,8 @@ export const PERMISSION_CATALOG: ReadonlyArray<{
   { key: Permissions.REPORTS_READ, description: 'Visualizar e exportar relatórios' },
   { key: Permissions.SETTINGS_READ, description: 'Visualizar configurações da barbearia' },
   { key: Permissions.SETTINGS_MANAGE, description: 'Editar configurações da barbearia' },
+  { key: Permissions.NOTIFICATIONS_READ, description: 'Visualizar notificações' },
+  { key: Permissions.NOTIFICATIONS_MANAGE, description: 'Gerenciar notificações' },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly PermissionKey[]> = {
@@ -151,6 +155,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly PermissionKey[]> = 
     Permissions.ACCOUNTS_READ,
     Permissions.ACCOUNTS_MANAGE,
     Permissions.ACCOUNTS_SETTLE,
+    Permissions.NOTIFICATIONS_READ,
+    Permissions.NOTIFICATIONS_MANAGE,
   ],
   [Role.BARBER]: [
     Permissions.DASHBOARD_READ,
@@ -162,6 +168,8 @@ export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly PermissionKey[]> = 
     Permissions.SALES_READ,
     Permissions.SALES_CREATE,
     Permissions.SALES_UPDATE,
+    Permissions.NOTIFICATIONS_READ,
+    Permissions.NOTIFICATIONS_MANAGE,
   ],
 };
 

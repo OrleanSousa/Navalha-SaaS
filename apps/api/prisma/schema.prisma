@@ -90,6 +90,13 @@ enum OnboardingStep {
   BOOKING
 }
 
+enum MessageJobStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+}
+
 enum CommissionStatus {
   PENDING
   PAID
@@ -359,6 +366,7 @@ model Barbershop {
   accountsPayable          AccountPayable[]
   accountsReceivable       AccountReceivable[]
   notifications            Notification[]
+  messageJobs              MessageJob[]
   auditLogs                AuditLog[]
   subscriptionInvoices     SubscriptionInvoice[]
   couponRedemptions        BillingCouponRedemption[]
@@ -965,11 +973,37 @@ model Notification {
   title        String
   message      String
   type         String
+  dedupKey     String?
+  actionUrl    String?
+  metadata     Json?
   readAt       DateTime?
-  barbershop   Barbershop @relation(fields: [barbershopId], references: [id])
+  barbershop   Barbershop @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
   createdAt    DateTime   @default(now())
 
+  @@unique([barbershopId, dedupKey])
   @@index([barbershopId, readAt])
+  @@index([barbershopId, createdAt])
+}
+
+model MessageJob {
+  id           String           @id @default(uuid())
+  barbershopId String
+  channel      String
+  recipient    String
+  template     String
+  payload      Json
+  status       MessageJobStatus @default(PENDING)
+  attempts     Int              @default(0)
+  maxAttempts  Int              @default(3)
+  scheduledAt  DateTime         @default(now())
+  processedAt  DateTime?
+  lastError    String?
+  barbershop   Barbershop       @relation(fields: [barbershopId], references: [id], onDelete: Cascade)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  @@index([status, scheduledAt])
+  @@index([barbershopId, createdAt])
 }
 
 model AuditLog {

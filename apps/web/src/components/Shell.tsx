@@ -39,6 +39,7 @@ const items = [
   ['/contas', 'Contas', Landmark, Permissions.ACCOUNTS_READ],
   ['/comissoes', 'Comissões', BadgeDollarSign, Permissions.COMMISSIONS_READ],
   ['/relatorios', 'Relatórios', ChartNoAxesCombined, Permissions.REPORTS_READ],
+  ['/notificacoes', 'Notificações', Bell, Permissions.NOTIFICATIONS_READ],
   ['/configuracoes', 'Configurações', Settings, Permissions.SETTINGS_READ],
 ] as ReadonlyArray<readonly [string, string, typeof LayoutDashboard, PermissionKey?]>;
 export function Shell() {
@@ -52,6 +53,12 @@ export function Shell() {
     primaryColor: string;
     primaryTextColor: string;
   }>({ queryKey: ['workspace'], queryFn: async () => (await api.get('/workspace')).data });
+  const { data: notificationCount } = useQuery<{ count: number }>({
+    queryKey: ['notification-count'],
+    queryFn: async () => (await api.get('/notifications/unread-count')).data,
+    enabled: can(Permissions.NOTIFICATIONS_READ),
+    refetchInterval: 30000,
+  });
   const title =
     items.find((x) => x[0] === loc.pathname)?.[1] ||
     (loc.pathname.startsWith('/colaboradores/') ? 'Colaborador' : 'Navalha');
@@ -128,10 +135,12 @@ export function Shell() {
               <Search />
               <input placeholder="Buscar..." />
             </label>
-            <button className="icon notify">
+            <NavLink className="icon notify" to="/notificacoes" title="Notificações">
               <Bell />
-              <i />
-            </button>
+              {Boolean(notificationCount?.count) && (
+                <i>{Math.min(notificationCount?.count || 0, 9)}</i>
+              )}
+            </NavLink>
             {can(Permissions.APPOINTMENTS_CREATE) && (
               <button className="primary">
                 <Plus /> Novo agendamento

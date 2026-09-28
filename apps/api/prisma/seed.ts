@@ -51,6 +51,8 @@ const permissionCatalog = [
   ['reports.read', 'Visualizar e exportar relatórios'],
   ['settings.read', 'Visualizar configurações da barbearia'],
   ['settings.manage', 'Editar configurações da barbearia'],
+  ['notifications.read', 'Visualizar notificações'],
+  ['notifications.manage', 'Gerenciar notificações'],
 ] as const;
 async function seedPermissions() {
   const permissions = [];
@@ -88,6 +90,8 @@ async function seedPermissions() {
     'accounts.read',
     'accounts.manage',
     'accounts.settle',
+    'notifications.read',
+    'notifications.manage',
   ]);
   await db.rolePermission.createMany({
     data: permissions
@@ -105,6 +109,8 @@ async function seedPermissions() {
     'sales.read',
     'sales.create',
     'sales.update',
+    'notifications.read',
+    'notifications.manage',
   ]);
   await db.rolePermission.createMany({
     data: permissions

@@ -1,0 +1,81 @@
+.notification-list {
+  overflow: hidden;
+}
+.notification-list > button {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: #fff;
+  padding: 16px 20px;
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  text-align: left;
+}
+.notification-list > button:first-child {
+  border-top: 0;
+}
+.notification-list > button:hover {
+  background: #faf9f5;
+}
+.notification-list > button.unread {
+  background: #fdfaf3;
+}
+.notification-list > button > span {
+  width: 39px;
+  height: 39px;
+  border-radius: 8px;
+  background: #f2ece0;
+  color: #a47427;
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+.notification-list > button > span svg {
+  width: 18px;
+}
+.notification-list > button > div {
+  flex: 1;
+}
+.notification-list b {
+  font-size: 11px;
+}
+.notification-list p {
+  font-size: 10px;
+  color: #666;
+  margin: 4px 0;
+}
+.notification-list small {
+  font-size: 8px;
+  color: #999;
+}
+.notification-list > button > i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--brand-color, #b8832b);
+  margin-top: 8px;
+}
+.notification-list .empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.notification-list .empty svg {
+  width: 18px;
+}
+.notifications-page .outline svg {
+  width: 15px;
+}
+@media (max-width: 600px) {
+  .notifications-page .module-head {
+    display: block;
+  }
+  .notifications-page .module-head button {
+    margin-top: 12px;
+  }
+  .notification-list > button {
+    padding: 14px 12px;
+  }
+}
