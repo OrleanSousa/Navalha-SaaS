@@ -217,6 +217,30 @@ describe('Isolamento multi-tenant (e2e)', () => {
       .expect(403);
   });
 
+  it('protege relatórios por tenant, permissão e período válido', async () => {
+    const adminToken = await login(`admin-a-${suffix}@example.com`);
+    const receptionistToken = await login(`receptionist-a-${suffix}@example.com`);
+    const report = await request(app.getHttpServer())
+      .get('/api/reports?start=2026-09-01&end=2026-09-30')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(report.body).toEqual(
+      expect.objectContaining({
+        overview: expect.any(Object),
+        timeline: expect.any(Array),
+        financial: expect.any(Object),
+      }),
+    );
+    await request(app.getHttpServer())
+      .get('/api/reports?start=2026-09-01&end=2026-09-30')
+      .set('Authorization', `Bearer ${receptionistToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get('/api/reports?start=2026-10-10&end=2026-10-01')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(400);
+  });
+
   it('isola listagem e detalhes de colaboradores entre tenants', async () => {
     const tokenA = await login(`admin-a-${suffix}@example.com`);
     const tokenB = await login(`admin-b-${suffix}@example.com`);

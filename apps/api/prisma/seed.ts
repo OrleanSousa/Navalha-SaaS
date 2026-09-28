@@ -48,6 +48,7 @@ const permissionCatalog = [
   ['accounts.read', 'Visualizar contas a pagar e receber'],
   ['accounts.manage', 'Gerenciar fornecedores, categorias e contas'],
   ['accounts.settle', 'Registrar pagamentos e recebimentos'],
+  ['reports.read', 'Visualizar e exportar relatórios'],
 ] as const;
 async function seedPermissions() {
   const permissions = [];

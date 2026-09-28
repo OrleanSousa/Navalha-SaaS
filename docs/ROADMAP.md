@@ -263,23 +263,23 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Etapa 14 — Dashboard e relatórios reais
 
-- [ ] 14.1 Remover todos os valores estáticos restantes
-- [ ] 14.2 Faturamento diário e mensal
-- [ ] 14.3 Atendimentos e agendamentos do dia
-- [ ] 14.4 Ticket médio e clientes atendidos
-- [ ] 14.5 Despesas e saldo do caixa
-- [ ] 14.6 Comissões pendentes
-- [ ] 14.7 Série temporal de faturamento
-- [ ] 14.8 Ranking de colaboradores
-- [ ] 14.9 Serviços mais vendidos
-- [ ] 14.10 Produtos mais vendidos
-- [ ] 14.11 Relatório financeiro
-- [ ] 14.12 Relatório de serviços
-- [ ] 14.13 Relatório de produtos e margem
-- [ ] 14.14 Relatório de colaboradores
-- [ ] 14.15 Relatório de clientes
-- [ ] 14.16 Filtros rápidos e período personalizado
-- [ ] 14.17 Exportação CSV/PDF
+- [x] 14.1 Remover todos os valores estáticos restantes
+- [x] 14.2 Faturamento diário e mensal
+- [x] 14.3 Atendimentos e agendamentos do dia
+- [x] 14.4 Ticket médio e clientes atendidos
+- [x] 14.5 Despesas e saldo do caixa
+- [x] 14.6 Comissões pendentes
+- [x] 14.7 Série temporal de faturamento
+- [x] 14.8 Ranking de colaboradores
+- [x] 14.9 Serviços mais vendidos
+- [x] 14.10 Produtos mais vendidos
+- [x] 14.11 Relatório financeiro
+- [x] 14.12 Relatório de serviços
+- [x] 14.13 Relatório de produtos e margem
+- [x] 14.14 Relatório de colaboradores
+- [x] 14.15 Relatório de clientes
+- [x] 14.16 Filtros rápidos e período personalizado
+- [x] 14.17 Exportação CSV/PDF
 
 ## Etapa 15 — Configurações e onboarding
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Iniciar a **Etapa 14** removendo os valores estáticos restantes do dashboard e dos relatórios (item 14.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.
+Iniciar a **Etapa 15** com a edição dos dados e da identidade da barbearia (item 15.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. O envio real de e-mail da recuperação de senha será conectado ao provedor da etapa 17; em desenvolvimento, o link é disponibilizado localmente.

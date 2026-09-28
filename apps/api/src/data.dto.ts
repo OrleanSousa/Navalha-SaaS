@@ -723,6 +723,23 @@ export class SetExpenseRecurrenceStatusDto {
   active: boolean;
 }
 
+export class DashboardQuery {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(7)
+  @Max(30)
+  days = 7;
+}
+
+export class ReportsQuery {
+  @IsDateString()
+  start: string;
+
+  @IsDateString()
+  end: string;
+}
+
 export class ListEmployeesQuery {
   @IsOptional()
   @Type(() => Number)

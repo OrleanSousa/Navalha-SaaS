@@ -36,7 +36,7 @@ const items = [
   ['/financeiro', 'Financeiro', WalletCards, Permissions.FINANCE_READ],
   ['/contas', 'Contas', Landmark, Permissions.ACCOUNTS_READ],
   ['/comissoes', 'Comissões', BadgeDollarSign, Permissions.COMMISSIONS_READ],
-  ['/relatorios', 'Relatórios', ChartNoAxesCombined],
+  ['/relatorios', 'Relatórios', ChartNoAxesCombined, Permissions.REPORTS_READ],
   ['/configuracoes', 'Configurações', Settings],
 ] as ReadonlyArray<readonly [string, string, typeof LayoutDashboard, PermissionKey?]>;
 export function Shell() {
@@ -64,8 +64,8 @@ export function Shell() {
         <div className="shop">
           <span>BM</span>
           <div>
-            <b>Barbearia Modelo</b>
-            <small>Plano profissional</small>
+            <b>{user?.barbershop || 'Minha barbearia'}</b>
+            <small>Ambiente de gestão</small>
           </div>
         </div>
         <nav>
@@ -75,7 +75,6 @@ export function Shell() {
               <NavLink to={to} end={to === '/'} onClick={() => setOpen(false)} key={to}>
                 <Icon />
                 <span>{label}</span>
-                {label === 'Agenda' && <em>8</em>}
               </NavLink>
             ))}
         </nav>

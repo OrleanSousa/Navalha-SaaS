@@ -1,5 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import { api, money } from '../lib/api';
+import { useAuth } from '../lib/auth';
 import {
   ArrowUpRight,
   CalendarCheck,
@@ -13,38 +15,85 @@ import {
   Package,
 } from 'lucide-react';
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis } from 'recharts';
-const empty = {
+import { useState } from 'react';
+
+type DashboardData = {
+  barbershop: string;
   metrics: {
-    todayRevenue: 0,
-    monthRevenue: 0,
-    todayAppointments: 0,
-    todayCustomers: 0,
-    cashBalance: 0,
-    averageTicket: 0,
-  },
-  chart: [],
-  appointments: [],
+    todayRevenue: number;
+    todayRevenueTrend: number;
+    monthRevenue: number;
+    monthRevenueTrend: number;
+    todayAppointments: number;
+    confirmedAppointments: number;
+    todayCustomers: number;
+    cashBalance: number;
+    cashOpen: boolean;
+    averageTicket: number;
+    monthExpenses: number;
+    pendingCommissions: number;
+    lowStockProducts: number;
+  };
+  chart: Array<{ day: string; value: number }>;
+  chartTotal: number;
+  chartTrend: number;
+  appointments: Array<{
+    time: string;
+    durationMinutes: number;
+    customer: string;
+    employee: string;
+    service: string;
+    status: string;
+  }>;
 };
+const statusLabels: Record<string, string> = {
+  SCHEDULED: 'Agendado',
+  CONFIRMED: 'Confirmado',
+  IN_SERVICE: 'Em atendimento',
+  COMPLETED: 'Finalizado',
+  CANCELLED: 'Cancelado',
+  NO_SHOW: 'Não compareceu',
+};
+const trend = (value: number) => `${value >= 0 ? '↑' : '↓'} ${Math.abs(value).toFixed(1)}%`;
+
 export function Dashboard() {
-  const { data = empty } = useQuery({
-    queryKey: ['dashboard'],
-    queryFn: async () => {
-      const r = await api.get('/dashboard');
-      return r.data;
-    },
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [days, setDays] = useState(7);
+  const { data, isLoading, isError, refetch } = useQuery<DashboardData>({
+    queryKey: ['dashboard', days],
+    queryFn: async () => (await api.get('/dashboard', { params: { days } })).data,
   });
+  if (isLoading) return <div className="empty big">Carregando indicadores...</div>;
+  if (isError || !data) {
+    return (
+      <div className="empty big">
+        Não foi possível carregar o dashboard.
+        <button className="outline" onClick={() => refetch()}>
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
   const m = data.metrics;
+  const now = new Date();
+  const greeting =
+    now.getHours() < 12 ? 'Bom dia' : now.getHours() < 18 ? 'Boa tarde' : 'Boa noite';
   return (
     <div className="page">
       <div className="welcome">
         <div>
           <h2>
-            Bom dia, Administrador <span>✦</span>
+            {greeting}, {user?.name || 'Administrador'} <span>✦</span>
           </h2>
-          <p>Aqui está o resumo da sua barbearia hoje.</p>
+          <p>
+            Aqui está o resumo real de {data.barbershop || user?.barbershop || 'sua barbearia'}{' '}
+            hoje.
+          </p>
         </div>
         <div className="date-pill">
-          <CalendarCheck /> Terça, 01 de setembro
+          <CalendarCheck />{' '}
+          {now.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' })}
         </div>
       </div>
       <div className="metrics">
@@ -52,74 +101,60 @@ export function Dashboard() {
           icon={<Wallet />}
           label="Faturamento hoje"
           value={money(m.todayRevenue)}
-          trend="12,5%"
+          trend={m.todayRevenueTrend}
+          sub="vs. ontem"
           color="green"
         />
         <Metric
           icon={<TrendingUp />}
           label="Faturamento no mês"
           value={money(m.monthRevenue)}
-          trend="8,2%"
+          trend={m.monthRevenueTrend}
+          sub="vs. mês anterior"
           color="amber"
         />
         <Metric
           icon={<CalendarCheck />}
           label="Agendamentos hoje"
-          value={String(m.todayAppointments).padStart(2, '0')}
-          sub="6 confirmados"
+          value={String(m.todayAppointments)}
+          detail={`${m.confirmedAppointments} confirmados`}
           color="blue"
         />
         <Metric
           icon={<UsersRound />}
           label="Clientes atendidos"
-          value={String(m.todayCustomers).padStart(2, '0')}
-          sub={`Ticket médio ${money(m.averageTicket)}`}
+          value={String(m.todayCustomers)}
+          detail={`Ticket médio ${money(m.averageTicket)}`}
           color="purple"
         />
       </div>
       <section className="quick">
         <b>AÇÕES RÁPIDAS</b>
         <div>
-          <button>
-            <span>
-              <CalendarCheck />
-            </span>
-            <i>
-              <strong>Novo agendamento</strong>
-              <small>Reserve um horário</small>
-            </i>
-            <ChevronRight />
-          </button>
-          <button>
-            <span>
-              <UsersRound />
-            </span>
-            <i>
-              <strong>Novo cliente</strong>
-              <small>Cadastre rapidamente</small>
-            </i>
-            <ChevronRight />
-          </button>
-          <button>
-            <span>
-              <Scissors />
-            </span>
-            <i>
-              <strong>Registrar venda</strong>
-              <small>Serviço ou produto</small>
-            </i>
-            <ChevronRight />
-          </button>
-          <button>
-            <span>
-              <Plus />
-            </span>
-            <i>
-              <strong>Lançar despesa</strong>
-              <small>Controle seu caixa</small>
-            </i>
-            <ChevronRight />
-          </button>
+          <Quick
+            icon={<CalendarCheck />}
+            title="Novo agendamento"
+            subtitle="Reserve um horário"
+            onClick={() => navigate('/agenda')}
+          />
+          <Quick
+            icon={<UsersRound />}
+            title="Novo cliente"
+            subtitle="Cadastre rapidamente"
+            onClick={() => navigate('/clientes')}
+          />
+          <Quick
+            icon={<Scissors />}
+            title="Registrar venda"
+            subtitle="Serviço ou produto"
+            onClick={() => navigate('/atendimentos')}
+          />
+          <Quick
+            icon={<Plus />}
+            title="Lançar despesa"
+            subtitle="Controle suas contas"
+            onClick={() => navigate('/contas')}
+          />
         </div>
       </section>
       <div className="dashboard-grid">
@@ -129,29 +164,31 @@ export function Dashboard() {
               <span className="eyebrow">PRÓXIMOS HORÁRIOS</span>
               <h3>Agenda de hoje</h3>
             </div>
-            <button className="link">
+            <button className="link" onClick={() => navigate('/agenda')}>
               Ver agenda completa <ArrowUpRight />
             </button>
           </div>
-          {data.appointments.map((a: any, i: number) => (
-            <div className="appointment" key={i}>
+          {data.appointments.map((appointment, index) => (
+            <div className="appointment" key={`${appointment.time}-${index}`}>
               <div className="time">
-                <b>{a.time}</b>
-                <small>30 min</small>
+                <b>{appointment.time}</b>
+                <small>{appointment.durationMinutes} min</small>
               </div>
-              <span className={`avatar c${i}`}>{a.customer.slice(0, 2).toUpperCase()}</span>
+              <span className={`avatar c${index}`}>
+                {appointment.customer.slice(0, 2).toUpperCase()}
+              </span>
               <div className="person">
-                <b>{a.customer}</b>
+                <b>{appointment.customer}</b>
                 <small>
-                  {a.service} · {a.employee}
+                  {appointment.service} · {appointment.employee}
                 </small>
               </div>
-              <span className={`status ${a.status.toLowerCase()}`}>
-                {a.status.replace('_', ' ')}
+              <span className={`status ${appointment.status.toLowerCase()}`}>
+                {statusLabels[appointment.status] || appointment.status}
               </span>
-              <button className="dots">•••</button>
             </div>
           ))}
+          {!data.appointments.length && <p className="empty">Nenhum agendamento para hoje.</p>}
         </section>
         <section className="card chart">
           <div className="card-head">
@@ -159,14 +196,16 @@ export function Dashboard() {
               <span className="eyebrow">DESEMPENHO</span>
               <h3>Faturamento</h3>
             </div>
-            <select>
-              <option>Últimos 7 dias</option>
-              <option>Últimos 30 dias</option>
+            <select value={days} onChange={(event) => setDays(Number(event.target.value))}>
+              <option value={7}>Últimos 7 dias</option>
+              <option value={30}>Últimos 30 dias</option>
             </select>
           </div>
           <div className="chart-total">
-            <b>{money(23800)}</b>
-            <span>↑ 14,2% no período</span>
+            <b>{money(data.chartTotal)}</b>
+            <span className={data.chartTrend < 0 ? 'negative' : ''}>
+              {trend(data.chartTrend)} no período anterior
+            </span>
           </div>
           <ResponsiveContainer width="100%" height={205}>
             <AreaChart data={data.chart}>
@@ -178,7 +217,7 @@ export function Dashboard() {
               </defs>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e9e5dc" />
               <XAxis dataKey="day" axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v) => money(Number(v))} />
+              <Tooltip formatter={(value) => money(Number(value))} />
               <Area
                 type="monotone"
                 dataKey="value"
@@ -199,7 +238,17 @@ export function Dashboard() {
             <small>SALDO DO CAIXA</small>
             <b>{money(m.cashBalance)}</b>
           </div>
-          <em>Caixa aberto</em>
+          <em>{m.cashOpen ? 'Caixa aberto' : 'Caixa fechado'}</em>
+        </div>
+        <div className="card mini">
+          <span>
+            <TrendingUp />
+          </span>
+          <div>
+            <small>DESPESAS NO MÊS</small>
+            <b>{money(m.monthExpenses)}</b>
+          </div>
+          <a onClick={() => navigate('/relatorios')}>Ver relatório →</a>
         </div>
         <div className="card mini">
           <span>
@@ -207,9 +256,9 @@ export function Dashboard() {
           </span>
           <div>
             <small>ESTOQUE BAIXO</small>
-            <b>3 produtos</b>
+            <b>{m.lowStockProducts} produto(s)</b>
           </div>
-          <a>Ver estoque →</a>
+          <a onClick={() => navigate('/produtos')}>Ver estoque →</a>
         </div>
         <div className="card mini">
           <span>
@@ -217,33 +266,63 @@ export function Dashboard() {
           </span>
           <div>
             <small>COMISSÕES PENDENTES</small>
-            <b>{money(1240)}</b>
+            <b>{money(m.pendingCommissions)}</b>
           </div>
-          <a>Ver detalhes →</a>
+          <a onClick={() => navigate('/comissoes')}>Ver detalhes →</a>
         </div>
       </div>
     </div>
   );
 }
-function Metric(p: {
+function Metric({
+  icon,
+  label,
+  value,
+  trend: change,
+  detail,
+  sub,
+  color,
+}: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  trend?: string;
+  trend?: number;
+  detail?: string;
   sub?: string;
   color: string;
 }) {
   return (
     <div className="metric">
-      <span className={p.color}>{p.icon}</span>
+      <span className={color}>{icon}</span>
       <div>
-        <small>{p.label}</small>
-        <b>{p.value}</b>
-        <em>
-          {p.trend && `↑ ${p.trend} `}
-          {p.sub || 'vs. ontem'}
+        <small>{label}</small>
+        <b>{value}</b>
+        <em className={(change || 0) < 0 ? 'negative' : ''}>
+          {change === undefined ? detail : `${trend(change)} ${sub}`}
         </em>
       </div>
     </div>
+  );
+}
+function Quick({
+  icon,
+  title,
+  subtitle,
+  onClick,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  subtitle: string;
+  onClick: () => void;
+}) {
+  return (
+    <button onClick={onClick}>
+      <span>{icon}</span>
+      <i>
+        <strong>{title}</strong>
+        <small>{subtitle}</small>
+      </i>
+      <ChevronRight />
+    </button>
   );
 }

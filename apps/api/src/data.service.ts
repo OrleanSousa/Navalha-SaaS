@@ -49,6 +49,8 @@ import {
   CancelAccountDto,
   ListAccountsQuery,
   AccountListStatus,
+  DashboardQuery,
+  ReportsQuery,
   ListAppointmentsQuery,
   CreateProductCategoryDto,
   CreateProductDto,
@@ -3392,7 +3394,222 @@ export class DataService {
     return this.parseDateOnly(value.slice(0, 10));
   }
 
-  async dashboard() {
+  async reports(query: ReportsQuery) {
+    const barbershopId = this.tenant.barbershopId;
+    const { start, end } = this.reportPeriod(query);
+    const [sales, transactions, commissions, employees] = await Promise.all([
+      this.db.sale.findMany({
+        where: { barbershopId, status: 'COMPLETED', completedAt: { gte: start, lte: end } },
+        include: {
+          employee: { select: { id: true, name: true, color: true } },
+          customer: { select: { id: true, name: true } },
+          items: {
+            include: { product: { select: { costPrice: true } } },
+          },
+        },
+        orderBy: { completedAt: 'desc' },
+      }),
+      this.db.financialTransaction.findMany({
+        where: { barbershopId, status: 'PAID', paidAt: { gte: start, lte: end } },
+        orderBy: { paidAt: 'desc' },
+      }),
+      this.db.commission.findMany({
+        where: { barbershopId, createdAt: { gte: start, lte: end } },
+        include: { employee: { select: { id: true, name: true } } },
+      }),
+      this.db.employee.findMany({
+        where: { barbershopId, deletedAt: null },
+        select: { id: true, name: true, color: true, active: true },
+        orderBy: { name: 'asc' },
+      }),
+    ]);
+
+    const revenue = sales.reduce((sum, sale) => sum + this.moneyToCents(sale.total), 0) / 100;
+    const expenses =
+      transactions
+        .filter((transaction) => transaction.type === 'EXPENSE')
+        .reduce((sum, transaction) => sum + this.moneyToCents(transaction.amount), 0) / 100;
+    const financialIncome =
+      transactions
+        .filter((transaction) => transaction.type === 'INCOME')
+        .reduce((sum, transaction) => sum + this.moneyToCents(transaction.amount), 0) / 100;
+    const customerIds = new Set(
+      sales.flatMap((sale) => (sale.customerId ? [sale.customerId] : [])),
+    );
+    const commissionTotal =
+      commissions.reduce((sum, commission) => sum + this.moneyToCents(commission.amount), 0) / 100;
+    const timeline = this.reportTimeline(start, end);
+    const timelineMap = new Map(timeline.map((entry) => [entry.date, entry]));
+    for (const sale of sales) {
+      const key = (sale.completedAt || sale.createdAt).toISOString().slice(0, 10);
+      const entry = timelineMap.get(key);
+      if (entry) entry.revenue += Number(sale.total);
+    }
+    for (const transaction of transactions.filter((item) => item.type === 'EXPENSE')) {
+      const key = (transaction.paidAt || transaction.createdAt).toISOString().slice(0, 10);
+      const entry = timelineMap.get(key);
+      if (entry) entry.expenses += Number(transaction.amount);
+    }
+
+    const employeeMap = new Map(
+      employees.map((employee) => [
+        employee.id,
+        { ...employee, attendances: 0, revenue: 0, commission: 0 },
+      ]),
+    );
+    for (const sale of sales) {
+      if (!sale.employeeId) continue;
+      const entry = employeeMap.get(sale.employeeId);
+      if (!entry) continue;
+      entry.attendances += 1;
+      entry.revenue += Number(sale.total);
+    }
+    for (const commission of commissions) {
+      const entry = employeeMap.get(commission.employeeId);
+      if (entry) entry.commission += Number(commission.amount);
+    }
+
+    const serviceMap = new Map<
+      string,
+      { id: string; name: string; quantity: number; revenue: number }
+    >();
+    const productMap = new Map<
+      string,
+      { id: string; name: string; quantity: number; revenue: number; cost: number; margin: number }
+    >();
+    for (const sale of sales) {
+      for (const item of sale.items) {
+        if (item.serviceId) {
+          const entry = serviceMap.get(item.serviceId) || {
+            id: item.serviceId,
+            name: item.description,
+            quantity: 0,
+            revenue: 0,
+          };
+          entry.quantity += item.quantity;
+          entry.revenue += Number(item.total);
+          serviceMap.set(item.serviceId, entry);
+        }
+        if (item.productId) {
+          const entry = productMap.get(item.productId) || {
+            id: item.productId,
+            name: item.description,
+            quantity: 0,
+            revenue: 0,
+            cost: 0,
+            margin: 0,
+          };
+          entry.quantity += item.quantity;
+          entry.revenue += Number(item.total);
+          entry.cost += Number(item.product?.costPrice || 0) * item.quantity;
+          entry.margin = entry.revenue - entry.cost;
+          productMap.set(item.productId, entry);
+        }
+      }
+    }
+
+    const customerMap = new Map<
+      string,
+      { id: string; name: string; visits: number; spent: number; lastVisit: Date | null }
+    >();
+    for (const sale of sales) {
+      if (!sale.customer) continue;
+      const entry = customerMap.get(sale.customer.id) || {
+        id: sale.customer.id,
+        name: sale.customer.name,
+        visits: 0,
+        spent: 0,
+        lastVisit: null,
+      };
+      entry.visits += 1;
+      entry.spent += Number(sale.total);
+      const visit = sale.completedAt || sale.createdAt;
+      if (!entry.lastVisit || visit > entry.lastVisit) entry.lastVisit = visit;
+      customerMap.set(sale.customer.id, entry);
+    }
+
+    const groupTransactions = (field: 'category' | 'method') => {
+      const groups = new Map<
+        string,
+        { name: string; income: number; expense: number; balance: number }
+      >();
+      for (const transaction of transactions) {
+        const name = String(transaction[field] || 'OTHER');
+        const entry = groups.get(name) || { name, income: 0, expense: 0, balance: 0 };
+        if (transaction.type === 'INCOME') entry.income += Number(transaction.amount);
+        else entry.expense += Number(transaction.amount);
+        entry.balance = entry.income - entry.expense;
+        groups.set(name, entry);
+      }
+      return [...groups.values()].sort((a, b) => b.income + b.expense - (a.income + a.expense));
+    };
+
+    return {
+      period: { start, end },
+      overview: {
+        revenue,
+        financialIncome,
+        expenses,
+        balance: financialIncome - expenses,
+        averageTicket: sales.length ? revenue / sales.length : 0,
+        attendances: sales.length,
+        customers: customerIds.size,
+        commissions: commissionTotal,
+      },
+      timeline,
+      employees: [...employeeMap.values()].sort((a, b) => b.revenue - a.revenue),
+      services: [...serviceMap.values()].sort((a, b) => b.quantity - a.quantity),
+      products: [...productMap.values()].sort((a, b) => b.quantity - a.quantity),
+      customers: [...customerMap.values()].sort((a, b) => b.spent - a.spent),
+      financial: {
+        transactions: transactions.map((transaction) => ({
+          id: transaction.id,
+          type: transaction.type,
+          origin: transaction.origin,
+          category: transaction.category,
+          description: transaction.description,
+          amount: Number(transaction.amount),
+          method: transaction.method,
+          paidAt: transaction.paidAt,
+        })),
+        byCategory: groupTransactions('category'),
+        byMethod: groupTransactions('method'),
+      },
+    };
+  }
+
+  private reportPeriod(query: ReportsQuery) {
+    const start = this.accountDate(query.start);
+    const endDate = this.accountDate(query.end);
+    const end = new Date(endDate);
+    end.setUTCHours(23, 59, 59, 999);
+    if (start > end) throw new BadRequestException('O período informado é inválido');
+    if (end.getTime() - start.getTime() > 370 * 86400000) {
+      throw new BadRequestException('O período está limitado a 370 dias');
+    }
+    return { start, end };
+  }
+
+  private reportTimeline(start: Date, end: Date) {
+    const timeline: Array<{ date: string; label: string; revenue: number; expenses: number }> = [];
+    const cursor = new Date(start);
+    while (cursor <= end) {
+      timeline.push({
+        date: cursor.toISOString().slice(0, 10),
+        label: cursor.toLocaleDateString('pt-BR', {
+          day: '2-digit',
+          month: '2-digit',
+          timeZone: 'UTC',
+        }),
+        revenue: 0,
+        expenses: 0,
+      });
+      cursor.setUTCDate(cursor.getUTCDate() + 1);
+    }
+    return timeline;
+  }
+
+  async dashboard(query: DashboardQuery = new DashboardQuery()) {
     const barbershopId = this.tenant.barbershopId;
     const now = new Date();
     const today = new Date(now);
@@ -3400,15 +3617,50 @@ export class DataService {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
     const month = new Date(now.getFullYear(), now.getMonth(), 1);
+    const previousMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const chartStart = new Date(today);
+    chartStart.setDate(chartStart.getDate() - (query.days - 1));
+    const previousChartStart = new Date(chartStart);
+    previousChartStart.setDate(previousChartStart.getDate() - query.days);
 
-    const [todaySales, monthSales, appointments, customers, cash] = await Promise.all([
-      this.db.sale.aggregate({
-        where: { barbershopId, status: 'COMPLETED', createdAt: { gte: today, lt: tomorrow } },
-        _sum: { total: true },
-        _avg: { total: true },
+    const [
+      shop,
+      todaySales,
+      yesterdaySales,
+      monthSales,
+      previousMonthSales,
+      appointments,
+      cash,
+      expenses,
+      pendingCommissions,
+      products,
+      chartSales,
+      previousChartSales,
+    ] = await Promise.all([
+      this.db.barbershop.findUnique({
+        where: { id: barbershopId },
+        select: { name: true },
+      }),
+      this.db.sale.findMany({
+        where: { barbershopId, status: 'COMPLETED', completedAt: { gte: today, lt: tomorrow } },
+        select: { total: true, customerId: true },
       }),
       this.db.sale.aggregate({
-        where: { barbershopId, status: 'COMPLETED', createdAt: { gte: month } },
+        where: { barbershopId, status: 'COMPLETED', completedAt: { gte: yesterday, lt: today } },
+        _sum: { total: true },
+      }),
+      this.db.sale.aggregate({
+        where: { barbershopId, status: 'COMPLETED', completedAt: { gte: month } },
+        _sum: { total: true },
+      }),
+      this.db.sale.aggregate({
+        where: {
+          barbershopId,
+          status: 'COMPLETED',
+          completedAt: { gte: previousMonth, lt: month },
+        },
         _sum: { total: true },
       }),
       this.db.appointment.findMany({
@@ -3420,13 +3672,6 @@ export class DataService {
         },
         orderBy: { startAt: 'asc' },
       }),
-      this.db.appointment.count({
-        where: {
-          barbershopId,
-          startAt: { gte: today, lt: tomorrow },
-          status: 'COMPLETED',
-        },
-      }),
       this.db.cashRegister.findFirst({
         where: { barbershopId, closedAt: null },
         orderBy: { openedAt: 'desc' },
@@ -3437,20 +3682,74 @@ export class DataService {
           },
         },
       }),
+      this.db.financialTransaction.aggregate({
+        where: { barbershopId, type: 'EXPENSE', status: 'PAID', paidAt: { gte: month } },
+        _sum: { amount: true },
+      }),
+      this.db.commission.aggregate({
+        where: { barbershopId, status: 'PENDING' },
+        _sum: { amount: true },
+      }),
+      this.db.product.findMany({
+        where: { barbershopId, active: true, deletedAt: null },
+        select: { stockQuantity: true, minimumStock: true },
+      }),
+      this.db.sale.findMany({
+        where: {
+          barbershopId,
+          status: 'COMPLETED',
+          completedAt: { gte: chartStart, lt: tomorrow },
+        },
+        select: { total: true, completedAt: true, createdAt: true },
+      }),
+      this.db.sale.aggregate({
+        where: {
+          barbershopId,
+          status: 'COMPLETED',
+          completedAt: { gte: previousChartStart, lt: chartStart },
+        },
+        _sum: { total: true },
+      }),
     ]);
 
     const cashSummary = cash
       ? this.financialSummary(Number(cash.openingBalance), cash.transactions)
       : null;
+    const todayRevenue =
+      todaySales.reduce((sum, sale) => sum + this.moneyToCents(sale.total), 0) / 100;
+    const yesterdayRevenue = Number(yesterdaySales._sum.total || 0);
+    const monthRevenue = Number(monthSales._sum.total || 0);
+    const previousMonthRevenue = Number(previousMonthSales._sum.total || 0);
+    const chart = this.reportTimeline(chartStart, today);
+    const chartMap = new Map(chart.map((entry) => [entry.date, entry]));
+    for (const sale of chartSales) {
+      const key = (sale.completedAt || sale.createdAt).toISOString().slice(0, 10);
+      const entry = chartMap.get(key);
+      if (entry) entry.revenue += Number(sale.total);
+    }
+    const chartTotal = chart.reduce((sum, entry) => sum + entry.revenue, 0);
+    const previousChartTotal = Number(previousChartSales._sum.total || 0);
 
     return {
+      barbershop: shop?.name || '',
       metrics: {
-        todayRevenue: Number(todaySales._sum.total || 0),
-        monthRevenue: Number(monthSales._sum.total || 0),
+        todayRevenue,
+        todayRevenueTrend: this.percentageChange(todayRevenue, yesterdayRevenue),
+        monthRevenue,
+        monthRevenueTrend: this.percentageChange(monthRevenue, previousMonthRevenue),
         todayAppointments: appointments.length,
-        todayCustomers: customers,
+        confirmedAppointments: appointments.filter((item) => item.status === 'CONFIRMED').length,
+        todayCustomers: new Set(
+          todaySales.flatMap((sale) => (sale.customerId ? [sale.customerId] : [])),
+        ).size,
         cashBalance: cashSummary?.expectedBalance || 0,
-        averageTicket: Number(todaySales._avg.total || 0),
+        cashOpen: Boolean(cash),
+        averageTicket: todaySales.length ? todayRevenue / todaySales.length : 0,
+        monthExpenses: Number(expenses._sum.amount || 0),
+        pendingCommissions: Number(pendingCommissions._sum.amount || 0),
+        lowStockProducts: products.filter(
+          (product) => product.stockQuantity <= product.minimumStock,
+        ).length,
       },
       appointments: appointments.slice(0, 5).map((appointment) => ({
         time: appointment.startAt.toLocaleTimeString('pt-BR', {
@@ -3461,8 +3760,19 @@ export class DataService {
         employee: appointment.employee.name,
         service: appointment.services.map(({ service }) => service.name).join(', '),
         status: appointment.status,
+        durationMinutes: Math.max(
+          0,
+          Math.round((appointment.endAt.getTime() - appointment.startAt.getTime()) / 60000),
+        ),
       })),
-      chart: [],
+      chart: chart.map((entry) => ({ day: entry.label, value: entry.revenue })),
+      chartTotal,
+      chartTrend: this.percentageChange(chartTotal, previousChartTotal),
     };
+  }
+
+  private percentageChange(current: number, previous: number) {
+    if (!previous) return current ? 100 : 0;
+    return ((current - previous) / previous) * 100;
   }
 }

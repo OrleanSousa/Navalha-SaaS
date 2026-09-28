@@ -45,6 +45,7 @@ export const Permissions = {
   ACCOUNTS_READ: 'accounts.read',
   ACCOUNTS_MANAGE: 'accounts.manage',
   ACCOUNTS_SETTLE: 'accounts.settle',
+  REPORTS_READ: 'reports.read',
 } as const;
 
 export type PermissionKey = (typeof Permissions)[keyof typeof Permissions];

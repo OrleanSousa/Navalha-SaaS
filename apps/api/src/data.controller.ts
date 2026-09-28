@@ -52,6 +52,8 @@ import {
   CancelAccountDto,
   ListAccountsQuery,
   SetExpenseRecurrenceStatusDto,
+  DashboardQuery,
+  ReportsQuery,
   ConfigureServiceProfessionalDto,
   CreateEmployeeAbsenceDto,
   CreateEmployeeDayOffDto,
@@ -685,7 +687,13 @@ export class DataController {
 
   @Get('dashboard')
   @RequirePermissions(Permissions.DASHBOARD_READ)
-  dashboard() {
-    return this.data.dashboard();
+  dashboard(@Query() query: DashboardQuery) {
+    return this.data.dashboard(query);
+  }
+
+  @Get('reports')
+  @RequirePermissions(Permissions.REPORTS_READ)
+  reports(@Query() query: ReportsQuery) {
+    return this.data.reports(query);
   }
 }

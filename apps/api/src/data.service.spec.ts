@@ -16,6 +16,7 @@ describe('DataService tenant isolation', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     db = {
+      barbershop: { findUnique: jest.fn().mockResolvedValue({ name: 'Barbearia Teste' }) },
       customer: {
         findMany: jest.fn().mockResolvedValue([]),
         findFirst: jest.fn(),
@@ -101,6 +102,7 @@ describe('DataService tenant isolation', () => {
         findFirst: jest.fn(),
       },
       financialTransaction: {
+        aggregate: jest.fn().mockResolvedValue({ _sum: { amount: null } }),
         create: jest.fn(),
         findFirst: jest.fn(),
         findMany: jest.fn().mockResolvedValue([]),
@@ -1874,13 +1876,122 @@ describe('DataService tenant isolation', () => {
 
     const calls = [
       ...db.sale.aggregate.mock.calls,
+      ...db.sale.findMany.mock.calls,
       ...db.appointment.findMany.mock.calls,
-      ...db.appointment.count.mock.calls,
       ...db.cashRegister.findFirst.mock.calls,
+      ...db.financialTransaction.aggregate.mock.calls,
+      ...db.commission.aggregate.mock.calls,
+      ...db.product.findMany.mock.calls,
     ];
-    expect(calls).toHaveLength(5);
+    expect(calls).toHaveLength(11);
     for (const [query] of calls) {
       expect(query.where.barbershopId).toBe('shop-1');
     }
+    expect(db.barbershop.findUnique).toHaveBeenCalledWith({
+      where: { id: 'shop-1' },
+      select: { name: true },
+    });
+  });
+
+  it('consolida relatórios reais por período e tenant', async () => {
+    const completedAt = new Date('2026-09-15T12:00:00.000Z');
+    db.sale.findMany.mockResolvedValue([
+      {
+        id: 'sale-1',
+        total: 100,
+        customerId: 'customer-1',
+        employeeId: 'employee-1',
+        completedAt,
+        createdAt: completedAt,
+        employee: { id: 'employee-1', name: 'Ana', color: '#000000' },
+        customer: { id: 'customer-1', name: 'Cliente' },
+        items: [
+          {
+            serviceId: 'service-1',
+            productId: null,
+            description: 'Corte',
+            quantity: 1,
+            total: 60,
+            product: null,
+          },
+          {
+            serviceId: null,
+            productId: 'product-1',
+            description: 'Pomada',
+            quantity: 2,
+            total: 40,
+            product: { costPrice: 8 },
+          },
+        ],
+      },
+    ]);
+    db.financialTransaction.findMany.mockResolvedValue([
+      {
+        id: 'income-1',
+        type: 'INCOME',
+        origin: 'SALE',
+        category: 'Vendas',
+        description: 'Venda',
+        amount: 100,
+        method: 'PIX',
+        paidAt: completedAt,
+        createdAt: completedAt,
+      },
+      {
+        id: 'expense-1',
+        type: 'EXPENSE',
+        origin: 'MANUAL',
+        category: 'Material',
+        description: 'Compra',
+        amount: 20,
+        method: 'PIX',
+        paidAt: completedAt,
+        createdAt: completedAt,
+      },
+    ]);
+    db.commission.findMany.mockResolvedValue([
+      { amount: 10, employeeId: 'employee-1', employee: { id: 'employee-1', name: 'Ana' } },
+    ]);
+    db.employee.findMany.mockResolvedValue([
+      { id: 'employee-1', name: 'Ana', color: '#000000', active: true },
+    ]);
+
+    const result = await service.reports({ start: '2026-09-01', end: '2026-09-30' });
+
+    expect(result.overview).toEqual(
+      expect.objectContaining({
+        revenue: 100,
+        financialIncome: 100,
+        expenses: 20,
+        balance: 80,
+        averageTicket: 100,
+        attendances: 1,
+        customers: 1,
+        commissions: 10,
+      }),
+    );
+    expect(result.services[0]).toEqual(
+      expect.objectContaining({ name: 'Corte', quantity: 1, revenue: 60 }),
+    );
+    expect(result.products[0]).toEqual(
+      expect.objectContaining({ name: 'Pomada', quantity: 2, revenue: 40, cost: 16, margin: 24 }),
+    );
+    expect(result.employees[0]).toEqual(
+      expect.objectContaining({ name: 'Ana', attendances: 1, revenue: 100, commission: 10 }),
+    );
+    expect(result.customers[0]).toEqual(
+      expect.objectContaining({ name: 'Cliente', visits: 1, spent: 100 }),
+    );
+    expect(db.sale.findMany.mock.calls[0][0].where.barbershopId).toBe('shop-1');
+    expect(db.financialTransaction.findMany.mock.calls[0][0].where.barbershopId).toBe('shop-1');
+  });
+
+  it('rejeita período de relatório invertido ou superior a 370 dias', async () => {
+    await expect(service.reports({ start: '2026-10-10', end: '2026-10-01' })).rejects.toThrow(
+      'O período informado é inválido',
+    );
+    await expect(service.reports({ start: '2025-01-01', end: '2026-09-01' })).rejects.toThrow(
+      'O período está limitado a 370 dias',
+    );
   });
 });

@@ -15,6 +15,7 @@ import { ProductDetails } from './pages/ProductDetails';
 import { Attendances } from './pages/Attendances';
 import { Commissions } from './pages/Commissions';
 import { Accounts } from './pages/Accounts';
+import { Reports } from './pages/Reports';
 import { Placeholder } from './pages/Placeholder';
 import { useAuth } from './lib/auth';
 import { ForgotPassword } from './pages/ForgotPassword';
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="comissoes" element={<Commissions />} />
         <Route path="financeiro" element={<Finance />} />
         <Route path="contas" element={<Accounts />} />
+        <Route path="relatorios" element={<Reports />} />
         <Route path="colaboradores" element={<Employees />} />
         <Route path="colaboradores/:id" element={<EmployeeDetails />} />
         <Route path=":page" element={<Placeholder />} />
