@@ -52,7 +52,7 @@ export function SuperOverview({ onShowTenants }: { onShowTenants(): void }) {
       <div className="module-head">
         <div>
           <h2>Visão geral da plataforma</h2>
-          <p>Acompanhamento consolidado dos tenants e assinaturas.</p>
+          <p>Acompanhamento consolidado das barbearias e assinaturas.</p>
         </div>
       </div>
       <div className="metrics super-metrics">
@@ -61,9 +61,9 @@ export function SuperOverview({ onShowTenants }: { onShowTenants(): void }) {
             <Building2 />
           </span>
           <div>
-            <small>TENANTS</small>
+            <small>BARBEARIAS</small>
             <b>{metrics.total}</b>
-            <em>{metrics.active} ativos</em>
+            <em>{metrics.active} ativas</em>
           </div>
         </article>
         <article className="metric">

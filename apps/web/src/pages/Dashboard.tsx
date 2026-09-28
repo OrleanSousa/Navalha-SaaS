@@ -68,7 +68,7 @@ export function Dashboard() {
   if (isError || !data) {
     return (
       <div className="empty big">
-        Não foi possível carregar o dashboard.
+        Não foi possível carregar o painel.
         <button className="outline" onClick={() => refetch()}>
           Tentar novamente
         </button>

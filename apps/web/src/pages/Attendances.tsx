@@ -47,8 +47,8 @@ type Payment = { method: string; amount: string };
 const paymentLabels: Record<string, string> = {
   CASH: 'Dinheiro',
   PIX: 'Pix',
-  DEBIT_CARD: 'CartÃ£o de dÃ©bito',
-  CREDIT_CARD: 'CartÃ£o de crÃ©dito',
+  DEBIT_CARD: 'Cartão de débito',
+  CREDIT_CARD: 'Cartão de crédito',
   OTHER: 'Outro',
 };
 
@@ -98,7 +98,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
     mutationFn: async (request: () => Promise<any>) => (await request()).data as Sale,
     onSuccess: async (sale) => refresh(sale.id),
     onError: (error: any) =>
-      toast.error(error.response?.data?.message || 'NÃ£o foi possÃ­vel concluir a operaÃ§Ã£o'),
+      toast.error(error.response?.data?.message || 'Não foi possível concluir a operação'),
   });
   const startAppointment = () =>
     action.mutate(() => api.post(`/sales/from-appointment/${appointmentId}`), {
@@ -131,7 +131,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
         }),
       {
         onSuccess: (sale) => {
-          toast.success('Venda finalizada e lanÃ§amentos registrados');
+          toast.success('Venda finalizada e lançamentos registrados');
           refresh(sale.id);
         },
       },
@@ -145,7 +145,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
           <p>
             {historyOnly
               ? 'Consulte pagamentos e imprima o resumo das vendas finalizadas.'
-              : 'Monte a comanda, receba o pagamento e finalize em uma Ãºnica operaÃ§Ã£o.'}
+              : 'Monte a comanda, receba o pagamento e finalize em uma única operação.'}
           </p>
         </div>
       </div>
@@ -156,13 +156,13 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
             <Scissors />
             <div>
               <b>A partir da agenda</b>
-              <small>Importa cliente, profissional e serviÃ§os.</small>
+              <small>Importa o cliente, o profissional e os serviços.</small>
             </div>
             <select value={appointmentId} onChange={(e) => setAppointmentId(e.target.value)}>
               <option value="">Selecione o agendamento</option>
               {options?.appointments.map((appointment) => (
                 <option value={appointment.id} key={appointment.id}>
-                  {new Date(appointment.startAt).toLocaleString('pt-BR')} â€”{' '}
+                  {new Date(appointment.startAt).toLocaleString('pt-BR')} —{' '}
                   {appointment.customer.name}
                 </option>
               ))}
@@ -179,7 +179,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
             <UserRound />
             <div>
               <b>Atendimento avulso</b>
-              <small>Cliente Ã© opcional; profissional Ã© obrigatÃ³rio.</small>
+              <small>O cliente é opcional; o profissional é obrigatório.</small>
             </div>
             <select value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
               <option value="">Profissional</option>
@@ -210,7 +210,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
 
       <div className="sale-layout">
         <section className="card sale-list">
-          <h3>{historyOnly ? 'HistÃ³rico' : 'Comandas recentes'}</h3>
+          <h3>{historyOnly ? 'Histórico' : 'Comandas recentes'}</h3>
           {isLoading && <div className="empty">Carregando...</div>}
           {!isLoading && !visibleSales.length && (
             <div className="empty">Nenhuma venda encontrada.</div>
@@ -224,7 +224,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
               <span>
                 <b>{sale.customer?.name || 'Consumidor'}</b>
                 <small>
-                  {sale.employee?.name || 'Sem profissional'} Â·{' '}
+                  {sale.employee?.name || 'Sem profissional'} ·{' '}
                   {new Date(sale.createdAt).toLocaleString('pt-BR')}
                 </small>
               </span>
@@ -245,7 +245,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
             <>
               <div className="sale-title">
                 <div>
-                  <h3>{selected.customer?.name || 'Consumidor nÃ£o identificado'}</h3>
+                  <h3>{selected.customer?.name || 'Consumidor não identificado'}</h3>
                   <p>Profissional: {selected.employee?.name}</p>
                 </div>
                 <em className={`status ${selected.status.toLowerCase()}`}>
@@ -256,12 +256,12 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
               {selected.status === 'DRAFT' && can(Permissions.SALES_UPDATE) && (
                 <div className="sale-adders">
                   <label>
-                    ServiÃ§o
+                    Serviço
                     <select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
                       <option value="">Selecione</option>
                       {options?.services.map((service) => (
                         <option value={service.id} key={service.id}>
-                          {service.name} â€” {money(Number(service.price))}
+                          {service.name} — {money(Number(service.price))}
                         </option>
                       ))}
                     </select>
@@ -293,7 +293,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
                       <option value="">Selecione</option>
                       {options?.products.map((product) => (
                         <option value={product.id} key={product.id}>
-                          {product.name} â€” {money(Number(product.salePrice))} (
+                          {product.name} — {money(Number(product.salePrice))} (
                           {product.stockQuantity})
                         </option>
                       ))}
@@ -329,7 +329,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
                     <span>
                       <b>{item.description}</b>
                       <small>
-                        {item.quantity} Ã— {money(Number(item.unitPrice))}
+                        {item.quantity} × {money(Number(item.unitPrice))}
                       </small>
                     </span>
                     <b>{money(Number(item.total))}</b>
@@ -347,7 +347,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
                   </div>
                 ))}
                 {!selected.items.length && (
-                  <div className="empty">Adicione serviÃ§os ou produtos.</div>
+                  <div className="empty">Adicione serviços ou produtos.</div>
                 )}
               </div>
 
@@ -484,7 +484,7 @@ export function Attendances({ historyOnly = false }: { historyOnly?: boolean }) 
                     <span>
                       <b>Comprovante da venda</b>
                       <small>
-                        #{selected.id.slice(0, 8).toUpperCase()} Â·{' '}
+                        #{selected.id.slice(0, 8).toUpperCase()} ·{' '}
                         {new Date(selected.completedAt || selected.createdAt).toLocaleString(
                           'pt-BR',
                         )}

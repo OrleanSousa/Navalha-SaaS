@@ -642,7 +642,7 @@ export class DataService {
       throw new ConflictException('Reative o colaborador antes de criar acesso');
     if (employee.userId) throw new ConflictException('Colaborador já possui acesso ao sistema');
     if (dto.role !== Role.BARBER && dto.role !== Role.RECEPTIONIST) {
-      throw new BadRequestException('Perfil inválido para colaborador');
+      throw new BadRequestException('Perfil inválido para o colaborador');
     }
 
     const email = dto.email.trim().toLowerCase();
@@ -727,7 +727,7 @@ export class DataService {
     if (!employee) throw new NotFoundException('Colaborador não encontrado');
     if (!employee.user) throw new ConflictException('Colaborador ainda não possui acesso');
     if (dto.role !== Role.BARBER && dto.role !== Role.RECEPTIONIST) {
-      throw new BadRequestException('Perfil inválido para colaborador');
+      throw new BadRequestException('Perfil inválido para o colaborador');
     }
 
     const email = dto.email.trim().toLowerCase();
@@ -894,7 +894,7 @@ export class DataService {
       select: { id: true },
     });
     if (overlap) {
-      throw new ConflictException('A jornada sobrepõe outro horário do colaborador');
+      throw new ConflictException('A jornada se sobrepõe a outro horário do colaborador');
     }
   }
 
@@ -1826,7 +1826,7 @@ export class DataService {
       where: { id, barbershopId: this.tenant.barbershopId },
       include: this.saleInclude(),
     });
-    if (!sale) throw new NotFoundException('Atendimento nÃ£o encontrado');
+    if (!sale) throw new NotFoundException('Atendimento não encontrado');
     return sale;
   }
 
@@ -1839,13 +1839,13 @@ export class DataService {
             where: { id: appointmentId, barbershopId },
             include: { services: { include: { service: true } }, sale: true },
           });
-          if (!appointment) throw new NotFoundException('Agendamento nÃ£o encontrado');
+          if (!appointment) throw new NotFoundException('Agendamento não encontrado');
           if (appointment.sale) {
             if (appointment.sale.status === 'DRAFT') return this.saleById(tx, appointment.sale.id);
-            throw new ConflictException('Este agendamento jÃ¡ possui uma venda finalizada');
+            throw new ConflictException('Este agendamento já possui uma venda finalizada');
           }
           if (!['SCHEDULED', 'CONFIRMED'].includes(appointment.status)) {
-            throw new BadRequestException('Este agendamento nÃ£o pode iniciar atendimento');
+            throw new BadRequestException('Este agendamento não pode iniciar um atendimento');
           }
           const subtotal = appointment.services.reduce(
             (sum, item) => sum + this.moneyToCents(item.price),
@@ -1899,8 +1899,8 @@ export class DataService {
           })
         : Promise.resolve(null),
     ]);
-    if (!employee) throw new NotFoundException('Profissional nÃ£o encontrado');
-    if (dto.customerId && !customer) throw new NotFoundException('Cliente nÃ£o encontrado');
+    if (!employee) throw new NotFoundException('Profissional não encontrado');
+    if (dto.customerId && !customer) throw new NotFoundException('Cliente não encontrado');
     return this.db.sale.create({
       data: {
         barbershopId,
@@ -1926,7 +1926,7 @@ export class DataService {
           employeeServices: { some: { employeeId: sale.employeeId! } },
         },
       });
-      if (!service) throw new NotFoundException('ServiÃ§o indisponÃ­vel para o profissional');
+      if (!service) throw new NotFoundException('Serviço indisponível para o profissional');
       await tx.saleItem.create({
         data: {
           barbershopId: this.tenant.barbershopId,
@@ -1953,7 +1953,7 @@ export class DataService {
           deletedAt: null,
         },
       });
-      if (!product) throw new NotFoundException('Produto nÃ£o encontrado');
+      if (!product) throw new NotFoundException('Produto não encontrado');
       await tx.saleItem.create({
         data: {
           barbershopId: this.tenant.barbershopId,
@@ -1975,7 +1975,7 @@ export class DataService {
       const removed = await tx.saleItem.deleteMany({
         where: { id: itemId, saleId, barbershopId: this.tenant.barbershopId },
       });
-      if (!removed.count) throw new NotFoundException('Item nÃ£o encontrado');
+      if (!removed.count) throw new NotFoundException('Item não encontrado');
       return this.recalculateSale(tx, saleId);
     });
   }
@@ -1986,7 +1986,7 @@ export class DataService {
       const discount = this.moneyToCents(dto.amount);
       const subtotal = this.moneyToCents(sale.subtotal);
       if (discount > subtotal)
-        throw new BadRequestException('O desconto nÃ£o pode superar o subtotal');
+        throw new BadRequestException('O desconto não pode superar o subtotal');
       await tx.sale.update({
         where: { id: sale.id },
         data: {
@@ -2011,14 +2011,14 @@ export class DataService {
               employee: true,
             },
           });
-          if (!sale) throw new NotFoundException('Atendimento nÃ£o encontrado');
-          if (sale.status !== 'DRAFT') throw new ConflictException('Atendimento jÃ¡ finalizado');
+          if (!sale) throw new NotFoundException('Atendimento não encontrado');
+          if (sale.status !== 'DRAFT') throw new ConflictException('Atendimento já finalizado');
           if (!sale.employee) throw new BadRequestException('Informe o profissional da venda');
           if (!sale.items.length) throw new BadRequestException('Adicione ao menos um item');
 
           const subtotal = sale.items.reduce((sum, item) => sum + this.moneyToCents(item.total), 0);
           const discount = this.moneyToCents(sale.discount);
-          if (discount > subtotal) throw new BadRequestException('Desconto invÃ¡lido');
+          if (discount > subtotal) throw new BadRequestException('Desconto inválido');
           const total = subtotal - discount;
           const paid = dto.payments.reduce(
             (sum, payment) => sum + this.moneyToCents(payment.amount),
@@ -2235,8 +2235,8 @@ export class DataService {
     const sale = await tx.sale.findFirst({
       where: { id, barbershopId: this.tenant.barbershopId },
     });
-    if (!sale) throw new NotFoundException('Atendimento nÃ£o encontrado');
-    if (sale.status !== 'DRAFT') throw new ConflictException('Atendimento jÃ¡ finalizado');
+    if (!sale) throw new NotFoundException('Atendimento não encontrado');
+    if (sale.status !== 'DRAFT') throw new ConflictException('Atendimento já finalizado');
     return sale;
   }
 
@@ -2264,9 +2264,9 @@ export class DataService {
 
   private rethrowSaleConflict(error: unknown): never {
     if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      if (error.code === 'P2002') throw new ConflictException('Este atendimento jÃ¡ foi iniciado');
+      if (error.code === 'P2002') throw new ConflictException('Este atendimento já foi iniciado');
       if (error.code === 'P2034') {
-        throw new ConflictException('A venda foi alterada por outra operaÃ§Ã£o; tente novamente');
+        throw new ConflictException('A venda foi alterada por outra operação; tente novamente');
       }
     }
     throw error;

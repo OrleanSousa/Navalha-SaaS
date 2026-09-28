@@ -1045,7 +1045,7 @@ describe('Isolamento multi-tenant (e2e)', () => {
     }
   });
 
-  it('finaliza venda dividida e reverte toda a transacao quando o estoque falha', async () => {
+  it('finaliza venda dividida e reverte toda a transação quando o estoque falha', async () => {
     const tokenA = await login(`admin-a-${suffix}@example.com`);
     await db.setting.upsert({
       where: { barbershopId: shopAId },

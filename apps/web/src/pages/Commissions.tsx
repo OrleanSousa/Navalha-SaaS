@@ -145,7 +145,7 @@ export function Commissions() {
       <div className="module-head">
         <div>
           <h2>Comissões</h2>
-          <p>Acompanhe cálculo, pendências e pagamentos dos profissionais.</p>
+          <p>Acompanhe os cálculos, as pendências e os pagamentos dos profissionais.</p>
         </div>
         {can(Permissions.COMMISSIONS_PAY) && selected.length > 0 && (
           <button className="primary" onClick={() => setShowPay(true)}>

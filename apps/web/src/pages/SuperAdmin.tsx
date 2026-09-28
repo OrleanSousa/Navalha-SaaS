@@ -233,7 +233,7 @@ export function SuperAdmin() {
           <div className="module-head">
             <div>
               <h2>Barbearias</h2>
-              <p>{data?.total || 0} tenants cadastrados na plataforma.</p>
+              <p>{data?.total || 0} barbearias cadastradas na plataforma.</p>
             </div>
             <button className="primary" onClick={() => setShowForm((visible) => !visible)}>
               <Plus /> Nova barbearia
@@ -252,7 +252,7 @@ export function SuperAdmin() {
                 create.mutate();
               }}
             >
-              <h3>Novo tenant</h3>
+              <h3>Nova barbearia</h3>
               <label>
                 Nome da barbearia
                 <input
@@ -447,7 +447,7 @@ export function SuperAdmin() {
             <section className="card tenant-detail">
               <div className="card-head">
                 <div>
-                  <span className="eyebrow">DETALHES DO TENANT</span>
+                  <span className="eyebrow">DETALHES DA BARBEARIA</span>
                   <h3>{selectedShop.name}</h3>
                 </div>
                 <div className="tenant-detail-actions">
@@ -731,7 +731,7 @@ export function SuperAdmin() {
                   <b>{selectedShop._count.sales}</b>
                 </div>
                 <div>
-                  <small>ONBOARDING</small>
+                  <small>CONFIGURAÇÃO INICIAL</small>
                   <b>{selectedShop.onboarding.percentage}%</b>
                 </div>
               </div>

@@ -223,7 +223,7 @@ export function ProductCatalog() {
           <div className="service-form-head">
             <div>
               <h3>{editingId ? 'Editar produto' : 'Novo produto'}</h3>
-              <p>Cadastre identificação, preços e estoque mínimo.</p>
+              <p>Cadastre a identificação, os preços e o estoque mínimo.</p>
             </div>
             <button className="icon" type="button" onClick={closeForm}>
               <X />

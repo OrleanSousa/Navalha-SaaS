@@ -1340,7 +1340,7 @@ describe('DataService tenant isolation', () => {
         endTime: '19:00',
         active: true,
       }),
-    ).rejects.toThrow('A jornada sobrepõe outro horário do colaborador');
+    ).rejects.toThrow('A jornada se sobrepõe a outro horário do colaborador');
     expect(db.workSchedule.findFirst).toHaveBeenCalledWith({
       where: {
         barbershopId: 'shop-1',

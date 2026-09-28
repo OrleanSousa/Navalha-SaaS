@@ -128,7 +128,7 @@ describe('AuthService login', () => {
     expect(db.session.create).not.toHaveBeenCalled();
   });
 
-  it('permite acesso durante o periodo de cortesia', async () => {
+  it('permite acesso durante o período de cortesia', async () => {
     db.user.findUnique.mockResolvedValue(
       user({
         barbershop: {

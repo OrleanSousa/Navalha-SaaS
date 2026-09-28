@@ -67,7 +67,7 @@ export function SuperReports() {
       <div className="module-head">
         <div>
           <span className="eyebrow">ANÁLISE COMERCIAL</span>
-          <h2>Relatório por tenant</h2>
+          <h2>Relatório por barbearia</h2>
           <p>Desempenho das assinaturas e cobranças no período selecionado.</p>
         </div>
       </div>
@@ -143,7 +143,7 @@ export function SuperReports() {
                 <Building2 />
               </span>
               <div>
-                <small>TENANTS</small>
+                <small>BARBEARIAS</small>
                 <b>{data.totals.tenants}</b>
                 <em>{data.totals.invoices} faturas</em>
               </div>
@@ -227,7 +227,7 @@ export function SuperReports() {
               </tbody>
             </table>
             {!data.rows.length && (
-              <div className="empty">Nenhum tenant encontrado para os filtros.</div>
+              <div className="empty">Nenhuma barbearia encontrada com os filtros informados.</div>
             )}
           </div>
         </>

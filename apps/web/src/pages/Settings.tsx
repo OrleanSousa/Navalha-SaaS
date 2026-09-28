@@ -27,7 +27,11 @@ type SettingsData = {
 };
 const errorMessage = (error: any, fallback: string) => error.response?.data?.message || fallback;
 
-function useSettingsMutation(fn: () => Promise<any>, message: string, refresh: () => Promise<void>) {
+function useSettingsMutation(
+  fn: () => Promise<any>,
+  message: string,
+  refresh: () => Promise<void>,
+) {
   return useMutation({
     mutationFn: fn,
     onSuccess: async () => {
@@ -171,7 +175,9 @@ export function Settings() {
               onboardingAction.mutate(query.data.onboarding.dismissedAt ? 'resume' : 'dismiss')
             }
           >
-            {query.data.onboarding.dismissedAt ? 'Retomar onboarding' : 'Dispensar por agora'}
+            {query.data.onboarding.dismissedAt
+              ? 'Retomar configuração inicial'
+              : 'Dispensar por agora'}
           </button>
         </div>
         <div className="onboarding-progress">
