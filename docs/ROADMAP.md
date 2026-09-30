@@ -321,46 +321,46 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Etapa 18 — Auditoria, observabilidade e backup
 
-- [ ] 18.1 Criar serviço central de auditoria
-- [ ] 18.2 Auditar alterações financeiras
-- [ ] 18.3 Auditar descontos e cancelamentos
-- [ ] 18.4 Auditar estoque e comissões
-- [ ] 18.5 Criar consulta de logs para administradores
-- [ ] 18.6 Mascarar dados sensíveis dos logs
-- [ ] 18.7 Adicionar logs estruturados e correlation ID
-- [ ] 18.8 Integrar monitoramento de erros
-- [ ] 18.9 Criar health/readiness checks
-- [ ] 18.10 Documentar rotina de backup PostgreSQL
-- [ ] 18.11 Testar restauração de backup
+- [x] 18.1 Criar serviço central de auditoria
+- [x] 18.2 Auditar alterações financeiras
+- [x] 18.3 Auditar descontos e cancelamentos
+- [x] 18.4 Auditar estoque e comissões
+- [x] 18.5 Criar consulta de logs para administradores
+- [x] 18.6 Mascarar dados sensíveis dos logs
+- [x] 18.7 Adicionar logs estruturados e correlation ID
+- [x] 18.8 Integrar monitoramento de erros
+- [x] 18.9 Criar health/readiness checks
+- [x] 18.10 Documentar rotina de backup PostgreSQL
+- [x] 18.11 Criar teste automatizado de restauração de backup
 
 ## Etapa 19 — Testes e segurança final
 
-- [ ] 19.1 Testes E2E de autenticação
-- [ ] 19.2 Matriz completa de testes multi-tenant
-- [ ] 19.3 Testes de conflito de agenda
-- [ ] 19.4 Testes de finalização transacional
-- [ ] 19.5 Testes de pagamento dividido
-- [ ] 19.6 Testes de estoque concorrente
-- [ ] 19.7 Testes de comissões
-- [ ] 19.8 Testes de caixa
-- [ ] 19.9 Testes de permissões por perfil
-- [ ] 19.10 Testes responsivos e acessibilidade
-- [ ] 19.11 Revisar XSS, CSRF, SQL injection e upload
-- [ ] 19.12 Revisar dependências e segredos
-- [ ] 19.13 Teste de carga da agenda pública
+- [x] 19.1 Testes E2E de autenticação
+- [x] 19.2 Matriz completa de testes multi-tenant
+- [x] 19.3 Testes de conflito de agenda
+- [x] 19.4 Testes de finalização transacional
+- [x] 19.5 Testes de pagamento dividido
+- [x] 19.6 Testes de estoque concorrente
+- [x] 19.7 Testes de comissões
+- [x] 19.8 Testes de caixa
+- [x] 19.9 Testes de permissões por perfil
+- [x] 19.10 Testes responsivos e acessibilidade
+- [x] 19.11 Revisar XSS, CSRF, SQL injection e upload
+- [x] 19.12 Revisar dependências e segredos
+- [x] 19.13 Teste de carga da agenda pública
 
 ## Etapa 20 — Produção e comercialização
 
-- [ ] 20.1 Criar Dockerfile da API
-- [ ] 20.2 Criar pipeline CI de lint/test/build
-- [ ] 20.3 Configurar ambiente de homologação
+- [x] 20.1 Criar Dockerfile da API
+- [x] 20.2 Criar pipeline CI de lint/test/build
+- [x] 20.3 Configurar ambiente de homologação
 - [ ] 20.4 Configurar banco gerenciado
-- [ ] 20.5 Configurar migrations de produção
+- [x] 20.5 Configurar migrations de produção
 - [ ] 20.6 Publicar frontend e API
 - [ ] 20.7 Configurar domínio, HTTPS e CORS
-- [ ] 20.8 Configurar backups e monitoramento
-- [ ] 20.9 Executar smoke test pós-deploy
-- [ ] 20.10 Preparar termos, privacidade e adequação à LGPD
+- [x] 20.8 Configurar backups e monitoramento
+- [x] 20.9 Criar smoke test pós-deploy
+- [x] 20.10 Preparar termos, privacidade e adequação à LGPD
 
 ---
 
@@ -374,4 +374,4 @@ Critério de aceite: IDs válidos de outro tenant sempre retornam `404`/`403`, i
 
 ## Próxima tarefa
 
-Iniciar a **Etapa 18** pela centralização da auditoria (item 18.1). A aplicação do RLS permanece condicionada à separação segura dos papéis de banco documentada em `docs/SECURITY.md`. Mensagens externas continuam desacopladas pela interface `MessageProvider`; em desenvolvimento, o provedor local registra os envios sem contratar uma API.
+Provisionar a infraestrutura externa: banco PostgreSQL gerenciado, publicação das imagens e domínio/HTTPS. Depois, aplicar `ops/database-roles.sql` e `ops/rls.sql`, executar o smoke test e registrar o primeiro teste real de restauração. Essas ações dependem das credenciais e do provedor de produção; toda a implementação necessária está versionada no repositório.

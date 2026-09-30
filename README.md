@@ -46,6 +46,14 @@ Para verificar lint, testes e builds em uma única execução:
 npm run validate
 ```
 
+Testes adicionais e verificações de release:
+
+```bash
+npm run test:e2e
+npm run test:web
+npm run test:security
+```
+
 No PowerShell, use `Copy-Item .env.example .env` no lugar de `cp`. Acesse `http://localhost:5173`.
 
 Usuário de demonstração:
@@ -57,13 +65,16 @@ Admin@123
 
 ## Variáveis de ambiente
 
-| Variável | Uso |
-|---|---|
-| `DATABASE_URL` | Conexão PostgreSQL |
-| `JWT_SECRET` | Assinatura do token (mínimo recomendado: 32 caracteres) |
-| `PORT` | Porta da API |
-| `WEB_URL` | Origem permitida pelo CORS |
-| `VITE_API_URL` | URL pública da API no frontend |
+| Variável                  | Uso                                                     |
+| ------------------------- | ------------------------------------------------------- |
+| `DATABASE_URL`            | Conexão PostgreSQL                                      |
+| `JWT_SECRET`              | Assinatura do token (mínimo recomendado: 32 caracteres) |
+| `PORT`                    | Porta da API                                            |
+| `WEB_URL`                 | Origem permitida pelo CORS                              |
+| `VITE_API_URL`            | URL pública da API no frontend                          |
+| `SENTRY_DSN`              | DSN opcional para monitoramento de erros                |
+| `APP_ENV` / `APP_VERSION` | Ambiente e versão usados em logs e monitoramento        |
+| `UPLOAD_DIR`              | Diretório persistente de uploads                        |
 
 ## Modelo de dados
 

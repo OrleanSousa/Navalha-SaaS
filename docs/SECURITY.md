@@ -2,16 +2,24 @@
 
 ## PostgreSQL Row Level Security
 
-O uso de RLS foi avaliado na etapa 2.11. Ele não deve ser ativado ainda no ambiente atual pelos seguintes motivos:
+O isolamento principal continua na aplicação: o tenant vem exclusivamente do JWT, repositories filtram por `barbershopId`, relacionamentos são validados e a suíte E2E cruza IDs de tenants diferentes.
 
-- a aplicação e as migrations usam a conta proprietária `postgres`, que ignora políticas RLS por padrão;
-- usar `FORCE ROW LEVEL SECURITY` nessa mesma conta afetaria autenticação, migrations, seed e tarefas administrativas que não possuem tenant;
-- o Prisma utiliza pool de conexões, portanto uma variável de sessão com o tenant só é segura dentro de uma transação interativa com `SET LOCAL`;
-- ativar políticas antes de separar os papéis do banco criaria uma falsa sensação de isolamento ou poderia bloquear consultas legítimas.
+A segunda barreira está pronta em `ops/rls.sql`. Ela habilita políticas nas tabelas empresariais e compara `barbershopId` com `app.current_tenant_id`. As políticas falham fechadas quando não há contexto. `ops/database-roles.sql` separa o proprietário de migrations (`navalha_owner`) do papel da aplicação (`navalha_app`), que não possui `BYPASSRLS`.
 
-Antes da produção, o banco deverá utilizar dois papéis:
+Regras obrigatórias na ativação:
 
-1. um papel proprietário exclusivo para migrations;
-2. um papel limitado para a aplicação, sujeito às políticas RLS.
+1. migrations e seed usam apenas o papel proprietário;
+2. a API usa o papel limitado e define o tenant com `SET LOCAL` dentro da mesma transação das consultas;
+3. operações globais de Super Admin usam uma conexão administrativa separada e são auditadas;
+4. testes conectam explicitamente como `navalha_app`, pois o proprietário das tabelas ignora RLS por padrão;
+5. o rollout ocorre primeiro em homologação, com teste Barbearia A versus Barbearia B.
 
-As consultas tenant-aware deverão executar em transação com o tenant definido por `SET LOCAL`, enquanto operações globais de Super Admin usarão um fluxo administrativo explícito e auditado. Até essa infraestrutura existir, o isolamento continua obrigatório na camada de serviços, coberto por guards e testes E2E entre tenants.
+O RLS não é aplicado automaticamente pela migration para evitar bloquear login, Super Admin ou migrations em instalações que ainda usam uma única conta. Sua ativação é uma etapa operacional vinculada ao provisionamento do banco gerenciado.
+
+## Aplicação
+
+JWTs são curtos e refresh tokens rotativos ficam em cookie HTTP-only. Senhas usam bcrypt, DTOs rejeitam campos extras, Helmet configura headers, CORS aceita origem explícita e os endpoints sensíveis têm rate limiting. Uploads validam tamanho, MIME e assinatura binária.
+
+Logs HTTP são JSON e recebem correlation ID. Snapshots da auditoria mascaram senhas, tokens, documentos e contatos. Erros 5xx são enviados ao Sentry somente quando `SENTRY_DSN` estiver configurado, sem PII padrão.
+
+A revisão detalhada e a rotina pré-release estão em `docs/SECURITY-REVIEW.md`.
