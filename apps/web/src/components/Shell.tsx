@@ -24,6 +24,7 @@ import {
   Plus,
   LogOut,
   X,
+  ShieldCheck,
 } from 'lucide-react';
 const items = [
   ['/', 'Visão geral', LayoutDashboard, Permissions.DASHBOARD_READ],
@@ -41,6 +42,7 @@ const items = [
   ['/relatorios', 'Relatórios', ChartNoAxesCombined, Permissions.REPORTS_READ],
   ['/notificacoes', 'Notificações', Bell, Permissions.NOTIFICATIONS_READ],
   ['/configuracoes', 'Configurações', Settings, Permissions.SETTINGS_READ],
+  ['/auditoria', 'Auditoria', ShieldCheck, Permissions.AUDIT_READ],
 ] as ReadonlyArray<readonly [string, string, typeof LayoutDashboard, PermissionKey?]>;
 export function Shell() {
   const { user, logout, can } = useAuth();

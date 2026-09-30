@@ -1007,20 +1007,23 @@ model MessageJob {
 }
 
 model AuditLog {
-  id           String      @id @default(uuid())
-  barbershopId String?
-  userId       String?
-  action       String
-  entity       String
-  entityId     String?
-  before       Json?
-  after        Json?
-  ip           String?
-  barbershop   Barbershop? @relation(fields: [barbershopId], references: [id])
-  user         User?       @relation(fields: [userId], references: [id])
-  createdAt    DateTime    @default(now())
+  id            String      @id @default(uuid())
+  barbershopId  String?
+  userId        String?
+  action        String
+  entity        String
+  entityId      String?
+  before        Json?
+  after         Json?
+  ip            String?
+  userAgent     String?
+  correlationId String?
+  barbershop    Barbershop? @relation(fields: [barbershopId], references: [id])
+  user          User?       @relation(fields: [userId], references: [id])
+  createdAt     DateTime    @default(now())
 
   @@index([barbershopId, createdAt])
+  @@index([correlationId])
 }
 
 model Setting {

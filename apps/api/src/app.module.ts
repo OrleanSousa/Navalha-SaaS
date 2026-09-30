@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { ConfigModule } from '@nestjs/config';
@@ -18,6 +18,9 @@ import { PublicBookingService } from './public-booking.service';
 import { NotificationsController } from './notifications.controller';
 import { NotificationsService } from './notifications.service';
 import { LocalMessageProvider, MESSAGE_PROVIDER } from './message-provider';
+import { AuditController, AuditService } from './audit';
+import { ErrorMonitoringService, StructuredRequestLogger } from './observability';
+import { RequestContextMiddleware } from './request-context';
 
 @Module({
   imports: [
@@ -37,6 +40,7 @@ import { LocalMessageProvider, MESSAGE_PROVIDER } from './message-provider';
     SuperAdminController,
     PublicBookingController,
     NotificationsController,
+    AuditController,
   ],
   providers: [
     PrismaService,
@@ -50,8 +54,16 @@ import { LocalMessageProvider, MESSAGE_PROVIDER } from './message-provider';
     SuperAdminService,
     PublicBookingService,
     NotificationsService,
+    AuditService,
+    ErrorMonitoringService,
+    RequestContextMiddleware,
+    StructuredRequestLogger,
     { provide: MESSAGE_PROVIDER, useClass: LocalMessageProvider },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(RequestContextMiddleware, StructuredRequestLogger).forRoutes('*');
+  }
+}

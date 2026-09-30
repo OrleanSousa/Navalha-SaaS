@@ -79,6 +79,7 @@ import {
 } from './data.dto';
 import { AvailabilityService } from './availability.service';
 import { NotificationsService } from './notifications.service';
+import { AuditEntry, AuditService } from './audit';
 
 @Injectable()
 export class DataService {
@@ -87,6 +88,7 @@ export class DataService {
     private readonly tenant: TenantContext,
     private readonly availability: AvailabilityService,
     @Optional() private readonly notifications?: NotificationsService,
+    @Optional() private readonly auditService?: AuditService,
   ) {}
 
   async customers(query: ListCustomersQuery = new ListCustomersQuery()) {
@@ -1650,14 +1652,29 @@ export class DataService {
     if (!['SCHEDULED', 'CONFIRMED'].includes(appointment.status)) {
       throw new BadRequestException('Este agendamento não pode ser cancelado');
     }
-    const updated = await this.db.appointment.update({
-      where: { id: appointment.id },
-      data: {
-        status: 'CANCELLED',
-        cancellationReason: dto.reason.trim(),
-        cancelledAt: new Date(),
-      },
-      include: this.appointmentInclude(),
+    const updated = await this.db.$transaction(async (tx) => {
+      const result = await tx.appointment.update({
+        where: { id: appointment.id },
+        data: {
+          status: 'CANCELLED',
+          cancellationReason: dto.reason.trim(),
+          cancelledAt: new Date(),
+        },
+        include: this.appointmentInclude(),
+      });
+      await this.recordAudit(
+        {
+          userId: this.tenant.userId,
+          barbershopId: this.tenant.barbershopId,
+          action: 'APPOINTMENT_CANCELLED',
+          entity: 'APPOINTMENT',
+          entityId: appointment.id,
+          before: { status: appointment.status },
+          after: { status: 'CANCELLED', reason: dto.reason.trim() },
+        },
+        tx,
+      );
+      return result;
     });
     void this.notifications
       ?.appointmentCancelled(this.tenant.barbershopId, {
@@ -1987,7 +2004,7 @@ export class DataService {
       const subtotal = this.moneyToCents(sale.subtotal);
       if (discount > subtotal)
         throw new BadRequestException('O desconto não pode superar o subtotal');
-      await tx.sale.update({
+      const updated = await tx.sale.update({
         where: { id: sale.id },
         data: {
           discount: discount / 100,
@@ -1995,6 +2012,22 @@ export class DataService {
           discountReason: dto.reason.trim(),
         },
       });
+      await this.recordAudit(
+        {
+          userId: this.tenant.userId,
+          barbershopId: this.tenant.barbershopId,
+          action: 'SALE_DISCOUNT_APPLIED',
+          entity: 'SALE',
+          entityId: sale.id,
+          before: { discount: Number(sale.discount), total: Number(sale.total) },
+          after: {
+            discount: Number(updated.discount),
+            total: Number(updated.total),
+            reason: dto.reason.trim(),
+          },
+        },
+        tx,
+      );
       return this.saleById(tx, sale.id);
     });
   }
@@ -2781,6 +2814,21 @@ export class DataService {
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${this.tenant.barbershopId}))`;
   }
 
+  private recordAudit(entry: AuditEntry, tx: Prisma.TransactionClient) {
+    if (this.auditService) return this.auditService.record(entry, tx);
+    return tx.auditLog.create({
+      data: {
+        ...entry,
+        before: entry.before
+          ? (JSON.parse(JSON.stringify(entry.before)) as Prisma.InputJsonValue)
+          : undefined,
+        after: entry.after
+          ? (JSON.parse(JSON.stringify(entry.after)) as Prisma.InputJsonValue)
+          : undefined,
+      },
+    });
+  }
+
   private transactionAuditValue(transaction: {
     type: unknown;
     category: string;
@@ -3507,8 +3555,25 @@ export class DataService {
       where: { id: this.tenant.barbershopId },
       select: { id: true, logoUrl: true },
     });
-    const extension =
-      logo.mimetype === 'image/png' ? '.png' : logo.mimetype === 'image/webp' ? '.webp' : '.jpg';
+    const extensions: Record<string, string> = {
+      'image/jpeg': '.jpg',
+      'image/png': '.png',
+      'image/webp': '.webp',
+    };
+    const extension = extensions[logo.mimetype];
+    const validSignature =
+      (logo.mimetype === 'image/jpeg' &&
+        logo.buffer.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) ||
+      (logo.mimetype === 'image/png' &&
+        logo.buffer
+          .subarray(0, 8)
+          .equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) ||
+      (logo.mimetype === 'image/webp' &&
+        logo.buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+        logo.buffer.subarray(8, 12).toString('ascii') === 'WEBP');
+    if (!extension || !validSignature) {
+      throw new BadRequestException('Conteúdo da imagem inválido');
+    }
     const root = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
     const directory = join(root, 'barbershops');
     await mkdir(directory, { recursive: true });

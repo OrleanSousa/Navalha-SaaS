@@ -24,6 +24,7 @@ import { useAuth } from './lib/auth';
 import { ForgotPassword } from './pages/ForgotPassword';
 import { ResetPassword } from './pages/ResetPassword';
 import { SuperAdmin } from './pages/SuperAdmin';
+import { AuditLogs } from './pages/AuditLogs';
 export default function App() {
   const { user, loading } = useAuth();
   if (loading) return <div className="empty big">Carregando sessão...</div>;
@@ -61,6 +62,7 @@ export default function App() {
         <Route path="relatorios" element={<Reports />} />
         <Route path="configuracoes" element={<Settings />} />
         <Route path="notificacoes" element={<Notifications />} />
+        <Route path="auditoria" element={<AuditLogs />} />
         <Route path="colaboradores" element={<Employees />} />
         <Route path="colaboradores/:id" element={<EmployeeDetails />} />
         <Route path=":page" element={<Placeholder />} />

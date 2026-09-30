@@ -50,6 +50,7 @@ export const Permissions = {
   SETTINGS_MANAGE: 'settings.manage',
   NOTIFICATIONS_READ: 'notifications.read',
   NOTIFICATIONS_MANAGE: 'notifications.manage',
+  AUDIT_READ: 'audit.read',
 } as const;
 
 export type PermissionKey = (typeof Permissions)[keyof typeof Permissions];

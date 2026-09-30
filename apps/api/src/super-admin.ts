@@ -6,6 +6,7 @@ import {
   Get,
   Injectable,
   NotFoundException,
+  Optional,
   Param,
   ParseUUIDPipe,
   Patch,
@@ -49,6 +50,7 @@ import {
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from './prisma.service';
+import { AuditService } from './audit';
 import { AuthenticatedUser, CurrentUser } from './auth-context';
 import { AllowSuperAdmin, PermissionsGuard, Roles, RolesGuard } from './rbac';
 
@@ -369,7 +371,10 @@ export class RegisterBillingFailureDto {
 
 @Injectable()
 export class SuperAdminService {
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    @Optional() private readonly auditService?: AuditService,
+  ) {}
 
   plans() {
     return this.db.plan.findMany({
@@ -1750,6 +1755,17 @@ export class SuperAdminService {
     before: unknown,
     after: unknown,
   ) {
+    if (this.auditService) {
+      return this.auditService.record({
+        userId,
+        barbershopId,
+        action,
+        entity,
+        entityId,
+        before,
+        after,
+      });
+    }
     return this.db.auditLog.create({
       data: {
         userId,

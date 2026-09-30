@@ -63,6 +63,7 @@ export const Permissions = {
   SETTINGS_MANAGE: 'settings.manage',
   NOTIFICATIONS_READ: 'notifications.read',
   NOTIFICATIONS_MANAGE: 'notifications.manage',
+  AUDIT_READ: 'audit.read',
 } as const;
 
 export type PermissionKey = (typeof Permissions)[keyof typeof Permissions];
@@ -131,6 +132,7 @@ export const PERMISSION_CATALOG: ReadonlyArray<{
   { key: Permissions.SETTINGS_MANAGE, description: 'Editar configurações da barbearia' },
   { key: Permissions.NOTIFICATIONS_READ, description: 'Visualizar notificações' },
   { key: Permissions.NOTIFICATIONS_MANAGE, description: 'Gerenciar notificações' },
+  { key: Permissions.AUDIT_READ, description: 'Consultar registros de auditoria' },
 ];
 
 export const DEFAULT_ROLE_PERMISSIONS: Record<Role, readonly PermissionKey[]> = {

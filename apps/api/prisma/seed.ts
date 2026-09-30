@@ -53,6 +53,7 @@ const permissionCatalog = [
   ['settings.manage', 'Editar configurações da barbearia'],
   ['notifications.read', 'Visualizar notificações'],
   ['notifications.manage', 'Gerenciar notificações'],
+  ['audit.read', 'Consultar registros de auditoria'],
 ] as const;
 async function seedPermissions() {
   const permissions = [];
